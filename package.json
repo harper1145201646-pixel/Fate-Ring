@@ -1,0 +1,55 @@
+{
+  "name": "tarot-fate-ring",
+  "version": "1.0.0",
+  "description": "3D tarot fate ring desktop app with gesture interaction and DeepSeek reading.",
+  "type": "module",
+  "main": "electron-main.cjs",
+  "scripts": {
+    "start": "node tarot-deepseek-server.mjs",
+    "web:start": "node scripts/tarot-web.mjs start",
+    "web:stop": "node scripts/tarot-web.mjs stop",
+    "web:status": "node scripts/tarot-web.mjs status",
+    "electron": "electron .",
+    "dist:mac": "electron-builder --mac dmg",
+    "dist:win": "electron-builder --win nsis",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.harper.tarotfatering",
+    "productName": "The Fate Ring",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron-main.cjs",
+      "tarot-fate-ring.html",
+      "back/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.lifestyle",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "artifactName": "The-Fate-Ring-${version}-mac.${ext}"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "The-Fate-Ring-${version}-setup.${ext}"
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.7.0",
+    "electron-builder": "^24.13.3"
+  }
+}

@@ -1,0 +1,3300 @@
+<!--
+============================================================
+本项目需用户自行下载塔罗牌图片资源，图片路径要求：
+- 卡牌背面图：/back/back1.png~/back/back7.png（至少7张循环使用）
+- 所有图片路径仅为示例，需用户根据实际文件结构调整
+- 卡牌正面图：./back/[卡牌id].jpg（例如：./back/maj-TheFool.jpg、./back/cups-Ace.jpg）
+============================================================
+-->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>THE FATE RING | 塔罗牌3D命运之轮</title>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <style>
+    :root {
+      --gold: #d4af37;
+      --gold-soft: rgba(212, 175, 55, 0.42);
+      --ink: #05020a;
+      --violet: #170826;
+      --violet-2: #2d1349;
+      --card-w: 110px;
+      --card-h: 187px;
+      --ring-radius: 580px;
+      --tilt-x: -17deg;
+      --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      overflow: hidden;
+      color: #f8efd2;
+      font-family: Optima, "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at 50% 18%, rgba(92, 45, 143, 0.34), transparent 34%),
+        radial-gradient(circle at 18% 82%, rgba(212, 175, 55, 0.12), transparent 32%),
+        linear-gradient(145deg, #020106 0%, #100419 46%, #040208 100%);
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.24;
+      background-image:
+        linear-gradient(rgba(212, 175, 55, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(212, 175, 55, 0.06) 1px, transparent 1px);
+      background-size: 76px 76px;
+      mask-image: radial-gradient(circle at 50% 42%, black, transparent 72%);
+    }
+
+    button {
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+    }
+
+    .app {
+      position: relative;
+      width: 100vw;
+      height: 100dvh;
+      isolation: isolate;
+    }
+
+    .particle-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: -3;
+      opacity: 0.26;
+    }
+
+    .particle-placeholder {
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      pointer-events: none;
+      background-image:
+        radial-gradient(circle, rgba(212, 175, 55, 0.52) 0 1px, transparent 2px),
+        radial-gradient(circle, rgba(184, 137, 255, 0.28) 0 1px, transparent 2px);
+      background-size: 121px 121px, 173px 173px;
+      background-position: 14px 28px, 70px 30px;
+    }
+
+    .magic-sigil {
+      position: fixed;
+      left: 50%;
+      top: 49%;
+      width: min(74vw, 760px);
+      height: min(74vw, 760px);
+      transform: translate(-50%, -50%);
+      opacity: 0.18;
+      z-index: -1;
+      animation: sigilSpin 38s linear infinite;
+      filter: drop-shadow(0 0 34px rgba(212, 175, 55, 0.26));
+    }
+
+    @keyframes sigilSpin {
+      to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+
+    .screen {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 12px;
+      padding: 28px clamp(18px, 4vw, 56px) 22px;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 520ms var(--ease), visibility 520ms var(--ease);
+    }
+
+    .screen.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: start;
+      gap: 18px;
+      z-index: 20;
+    }
+
+    .title-kicker {
+      margin: 0 0 7px;
+      color: var(--gold);
+      letter-spacing: 0.22em;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 920px;
+      font-size: clamp(28px, 4.8vw, 58px);
+      line-height: 1.02;
+      letter-spacing: 0;
+      text-shadow: 0 0 30px rgba(212, 175, 55, 0.2);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-top: 2px;
+    }
+
+    .icon-btn,
+    .primary-btn {
+      min-height: 38px;
+      border: 1px solid rgba(212, 175, 55, 0.42);
+      background: rgba(9, 4, 16, 0.74);
+      box-shadow: inset 0 0 0 1px rgba(255, 245, 204, 0.04), 0 14px 32px rgba(0, 0, 0, 0.26);
+      transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+    }
+
+    .icon-btn {
+      width: 42px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 17px;
+    }
+
+    .primary-btn {
+      border-radius: 999px;
+      padding: 0 22px;
+      color: #130a05;
+      font-weight: 700;
+      background: linear-gradient(135deg, #f2d77a, var(--gold) 56%, #9b741d);
+    }
+
+    .icon-btn:hover,
+    .primary-btn:hover {
+      transform: translateY(-1px);
+      border-color: rgba(242, 215, 122, 0.86);
+    }
+
+    .primary-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+      transform: none;
+    }
+
+    .question-panel,
+    .question-summary,
+    .reading-question,
+    .followup-panel {
+      width: min(1120px, 100%);
+      margin: 0 auto;
+      border: 1px solid rgba(212, 175, 55, 0.32);
+      border-radius: 10px;
+      background: linear-gradient(145deg, rgba(8, 3, 15, 0.82), rgba(18, 7, 30, 0.66));
+      box-shadow: inset 0 0 0 1px rgba(255, 245, 204, 0.04), 0 20px 46px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(16px);
+    }
+
+    .question-panel {
+      z-index: 16;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 14px;
+      align-items: end;
+      padding: 16px;
+    }
+
+    .question-panel.hidden {
+      display: none;
+    }
+
+    .question-field {
+      display: grid;
+      gap: 8px;
+    }
+
+    .question-field label,
+    .followup-form label {
+      color: var(--gold);
+      font-size: 12px;
+      letter-spacing: 0.14em;
+    }
+
+    .question-input,
+    .followup-input,
+    .ai-input,
+    .ai-select {
+      width: 100%;
+      border: 1px solid rgba(212, 175, 55, 0.34);
+      border-radius: 8px;
+      color: #f8efd2;
+      background: rgba(5, 2, 10, 0.66);
+      outline: none;
+      box-shadow: inset 0 0 18px rgba(212, 175, 55, 0.04);
+    }
+
+    .question-input {
+      min-height: 76px;
+      padding: 12px 14px;
+      resize: vertical;
+      line-height: 1.6;
+    }
+
+    .question-input:focus,
+    .followup-input:focus,
+    .ai-input:focus,
+    .ai-select:focus {
+      border-color: rgba(242, 215, 122, 0.86);
+      box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.12);
+    }
+
+    .ai-settings {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.45fr);
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .ai-field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .ai-field label {
+      color: rgba(212, 175, 55, 0.86);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+    }
+
+    .ai-input,
+    .ai-select {
+      min-height: 38px;
+      padding: 0 11px;
+    }
+
+    .question-hint {
+      min-height: 18px;
+      color: rgba(248, 239, 210, 0.58);
+      font-size: 12px;
+    }
+
+    .question-summary,
+    .reading-question {
+      display: none;
+      padding: 12px 16px;
+      color: rgba(248, 239, 210, 0.82);
+      line-height: 1.6;
+    }
+
+    .question-summary.active,
+    .reading-question.active {
+      display: block;
+    }
+
+    .question-label {
+      color: var(--gold);
+      margin-right: 8px;
+      letter-spacing: 0.08em;
+      font-size: 12px;
+    }
+
+    .ai-badge {
+      display: inline-grid;
+      place-items: center;
+      min-height: 22px;
+      margin-left: 8px;
+      padding: 0 8px;
+      border: 1px solid rgba(212, 175, 55, 0.32);
+      border-radius: 999px;
+      color: rgba(248, 239, 210, 0.78);
+      background: rgba(212, 175, 55, 0.08);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+    }
+
+    .ai-badge.warning {
+      border-color: rgba(188, 112, 112, 0.28);
+      color: rgba(128, 74, 78, 0.88);
+      background: rgba(236, 206, 206, 0.58);
+    }
+
+    .api-retry-btn {
+      display: none;
+    }
+
+    .api-retry-btn.visible {
+      display: inline-flex;
+    }
+
+    .ring-stage.locked {
+      opacity: 0.46;
+      filter: saturate(0.68);
+    }
+
+    .ring-stage.locked::after {
+      content: "先输入问题，再开始选牌";
+      position: absolute;
+      left: 50%;
+      top: 54%;
+      transform: translate(-50%, -50%);
+      padding: 8px 14px;
+      border: 1px solid rgba(212, 175, 55, 0.36);
+      border-radius: 999px;
+      color: rgba(248, 239, 210, 0.82);
+      background: rgba(5, 2, 10, 0.76);
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      pointer-events: none;
+      backdrop-filter: blur(10px);
+    }
+
+    .gesture-panel {
+      position: fixed;
+      left: clamp(14px, 3vw, 34px);
+      bottom: clamp(14px, 3vw, 26px);
+      z-index: 45;
+      width: 168px;
+      padding: 6px;
+      border: 1px solid rgba(212, 175, 55, 0.32);
+      border-radius: 10px;
+      background: rgba(5, 2, 10, 0.72);
+      box-shadow: 0 20px 46px rgba(0, 0, 0, 0.36), inset 0 0 0 1px rgba(255, 245, 204, 0.04);
+      backdrop-filter: blur(14px);
+      opacity: 1;
+      transform: translateY(0);
+      visibility: visible;
+      transition: opacity 260ms ease, transform 260ms ease, visibility 260ms ease;
+    }
+
+    .gesture-panel.active {
+      opacity: 1;
+      transform: translateY(0);
+      visibility: visible;
+    }
+
+    .gesture-video {
+      display: block;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      border-radius: 8px;
+      border: 1px solid rgba(212, 175, 55, 0.26);
+      object-fit: cover;
+      transform: scaleX(-1);
+      background: #08030d;
+    }
+
+    .gesture-overlay {
+      position: absolute;
+      left: 6px;
+      top: 6px;
+      width: calc(100% - 12px);
+      aspect-ratio: 4 / 3;
+      border-radius: 8px;
+      pointer-events: none;
+      transform: scaleX(-1);
+    }
+
+    .gesture-status {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 22px;
+      padding: 0 7px;
+      border: 1px solid rgba(212, 175, 55, 0.2);
+      border-radius: 999px;
+      color: rgba(248, 239, 210, 0.78);
+      background: rgba(5, 2, 10, 0.68);
+      font-size: 12px;
+      line-height: 1.25;
+      backdrop-filter: blur(10px);
+    }
+
+    .gesture-dot {
+      width: 7px;
+      height: 7px;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      background: rgba(248, 239, 210, 0.42);
+      box-shadow: 0 0 0 rgba(212, 175, 55, 0);
+    }
+
+    .gesture-panel.tracking .gesture-dot {
+      background: var(--gold);
+      box-shadow: 0 0 14px rgba(212, 175, 55, 0.82);
+    }
+
+    .ring-stage {
+      position: relative;
+      min-height: 390px;
+      perspective: 2400px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+    }
+
+    .ring {
+      position: relative;
+      width: 1px;
+      height: 1px;
+      transform-style: preserve-3d;
+      transform: rotateX(var(--tilt-x)) rotateY(0deg);
+      will-change: transform;
+    }
+
+    .tarot-card {
+      position: absolute;
+      left: calc(var(--card-w) / -2);
+      top: calc(var(--card-h) / -2);
+      width: var(--card-w);
+      height: var(--card-h);
+      border: 1px solid rgba(212, 175, 55, 0.52);
+      border-radius: 10px;
+      overflow: visible;
+      transform-style: preserve-3d;
+      background: #11081d;
+      box-shadow: 0 18px 36px rgba(0, 0, 0, 0.48);
+      transition: opacity 260ms ease, filter 260ms ease;
+      will-change: transform, opacity;
+    }
+
+    .tarot-card::before {
+      content: "";
+      position: absolute;
+      inset: -6px;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      pointer-events: none;
+      transition: border-color 240ms ease, box-shadow 240ms ease;
+    }
+
+    .tarot-card.focused {
+      z-index: 5;
+      filter: saturate(1.12) brightness(1.08);
+    }
+
+    .tarot-card.focused::before {
+      border-color: rgba(242, 215, 122, 0.92);
+      box-shadow: 0 0 22px rgba(212, 175, 55, 0.44), inset 0 0 18px rgba(212, 175, 55, 0.24);
+    }
+
+    .tarot-card.selected {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .tarot-face {
+      position: absolute;
+      inset: 0;
+      border-radius: 10px;
+      overflow: hidden;
+      backface-visibility: hidden;
+      background: #13081f;
+    }
+
+    .tarot-face img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .card-fallback {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 14px;
+      text-align: center;
+      color: rgba(248, 239, 210, 0.88);
+      background:
+        linear-gradient(150deg, rgba(212, 175, 55, 0.15), transparent 36%),
+        repeating-linear-gradient(90deg, transparent 0 17px, rgba(212, 175, 55, 0.06) 17px 18px),
+        #13081f;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .card-back .card-fallback::before {
+      content: "";
+      position: absolute;
+      inset: 13px;
+      border: 1px solid rgba(212, 175, 55, 0.36);
+      border-radius: 7px;
+    }
+
+    .card-front {
+      transform: rotateY(180deg);
+    }
+
+    .energy-ring {
+      position: absolute;
+      inset: -22px;
+      border-radius: 18px;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateZ(2px);
+    }
+
+    .energy-ring::before,
+    .energy-ring::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border: 2px solid rgba(212, 175, 55, 0.18);
+      border-top-color: rgba(242, 215, 122, 0.96);
+      border-radius: 18px;
+      transform: rotate(0deg);
+    }
+
+    .energy-ring::after {
+      inset: 11px;
+      border-color: rgba(184, 137, 255, 0.08);
+      border-bottom-color: rgba(184, 137, 255, 0.78);
+    }
+
+    .tarot-card.holding .energy-ring {
+      opacity: 1;
+    }
+
+    .tarot-card.holding .energy-ring::before {
+      animation: energySpin 1.4s linear forwards;
+    }
+
+    .tarot-card.holding .energy-ring::after {
+      animation: energySpin 900ms linear infinite reverse;
+    }
+
+    .spark {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #f8df86;
+      box-shadow: 0 0 12px #d4af37;
+      opacity: 0;
+    }
+
+    .tarot-card.holding .spark {
+      opacity: 1;
+      animation: sparkOrbit 1.4s linear forwards;
+    }
+
+    .spark:nth-child(2) { animation-delay: 80ms; }
+    .spark:nth-child(3) { animation-delay: 180ms; }
+    .spark:nth-child(4) { animation-delay: 300ms; }
+
+    @keyframes energySpin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes sparkOrbit {
+      from { transform: rotate(0deg) translateX(86px) rotate(0deg); }
+      to { transform: rotate(360deg) translateX(86px) rotate(-360deg); }
+    }
+
+    .slots {
+      z-index: 12;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: clamp(10px, 3vw, 24px);
+      width: min(830px, 100%);
+      margin: 0 auto;
+    }
+
+    .slot {
+      min-height: 116px;
+      display: grid;
+      grid-template-columns: 58px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid rgba(212, 175, 55, 0.34);
+      border-radius: 10px;
+      background: rgba(5, 2, 10, 0.62);
+      box-shadow: inset 0 0 22px rgba(212, 175, 55, 0.05);
+      backdrop-filter: blur(12px);
+    }
+
+    .slot-thumb {
+      width: 58px;
+      height: 92px;
+      border: 1px dashed rgba(212, 175, 55, 0.38);
+      border-radius: 8px;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      color: rgba(212, 175, 55, 0.72);
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .slot-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .slot-role {
+      color: var(--gold);
+      font-size: 13px;
+      letter-spacing: 0.16em;
+    }
+
+    .slot-name {
+      margin-top: 5px;
+      min-height: 40px;
+      font-size: 15px;
+      line-height: 1.35;
+    }
+
+    .badge {
+      display: inline-grid;
+      place-items: center;
+      min-height: 22px;
+      margin-top: 8px;
+      padding: 0 8px;
+      border: 1px solid rgba(212, 175, 55, 0.42);
+      border-radius: 999px;
+      color: #f8eecb;
+      background: rgba(212, 175, 55, 0.1);
+      font-size: 12px;
+    }
+
+    .app.cover-exact .particle-canvas,
+    .app.cover-exact .particle-placeholder,
+    .app.cover-exact > .magic-sigil {
+      display: none;
+    }
+
+    .select-screen.cover-exact {
+      display: block;
+      padding: 0;
+      overflow: hidden;
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02)),
+        url("./assets/fate-ring-cover-clean.jpg") center / cover no-repeat;
+      color: #5d4548;
+    }
+
+    .select-screen.cover-exact .topbar {
+      position: absolute;
+      left: 2.8%;
+      top: 3.7%;
+      right: 2.6%;
+      z-index: 30;
+      pointer-events: none;
+    }
+
+    .select-screen.cover-exact .title-kicker,
+    .select-screen.cover-exact h1 {
+      opacity: 0;
+    }
+
+    .select-screen.cover-exact .toolbar {
+      position: absolute;
+      right: 0;
+      top: 2.4vh;
+      pointer-events: auto;
+    }
+
+    .select-screen.cover-exact .icon-btn {
+      width: clamp(42px, 3.2vw, 58px);
+      min-height: clamp(42px, 3.2vw, 58px);
+      color: transparent;
+      border-color: transparent;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .select-screen.cover-exact .question-panel {
+      position: absolute;
+      left: 16.8%;
+      top: 16.7%;
+      z-index: 35;
+      width: 68.5%;
+      min-height: 15.2%;
+      display: grid;
+      grid-template-columns: 1fr 11.8%;
+      gap: 1.1%;
+      align-items: center;
+      padding: 1.06% 1.1% 1.1%;
+      border: 1px solid rgba(154, 119, 121, 0.2);
+      border-radius: 22px;
+      background: rgba(255, 252, 248, 0.88);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5), 0 16px 38px rgba(132, 100, 104, 0.1);
+      backdrop-filter: blur(14px);
+    }
+
+    .select-screen.cover-exact .question-panel.hidden {
+      display: none;
+    }
+
+    .select-screen.cover-exact .question-field {
+      position: relative;
+      height: 100%;
+      gap: 0;
+    }
+
+    .select-screen.cover-exact .question-field::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      z-index: 0;
+      border-radius: 14px;
+      background: rgba(255, 252, 248, 0.78);
+      pointer-events: none;
+    }
+
+    .select-screen.cover-exact .question-field label,
+    .select-screen.cover-exact .question-hint,
+    .select-screen.cover-exact .question-input {
+      position: relative;
+      z-index: 1;
+    }
+
+    .select-screen.cover-exact .question-field label {
+      display: block;
+      padding-left: clamp(14px, 1.1vw, 22px);
+      color: rgba(91, 68, 72, 0.82);
+      opacity: 1;
+      letter-spacing: 0.04em;
+      font-size: clamp(12px, 0.78vw, 15px);
+    }
+
+    .select-screen.cover-exact .question-input {
+      min-height: clamp(58px, 6.3vw, 92px);
+      margin-top: 0;
+      padding: clamp(16px, 1.35vw, 26px) clamp(18px, 1.6vw, 30px);
+      border: 0;
+      border-radius: 12px;
+      color: rgba(89, 67, 71, 0.86);
+      background: transparent;
+      box-shadow: none;
+      font-size: clamp(16px, 1.04vw, 22px);
+      line-height: 1.5;
+    }
+
+    .select-screen.cover-exact .question-input::placeholder {
+      color: rgba(117, 91, 94, 0.52);
+    }
+
+    .select-screen.cover-exact .question-input:focus::placeholder {
+      color: transparent;
+    }
+
+    .select-screen.cover-exact .question-input:focus {
+      border-color: transparent;
+      box-shadow: 0 0 0 2px rgba(177, 121, 129, 0.12);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .select-screen.cover-exact .question-hint {
+      min-height: 16px;
+      padding-left: clamp(14px, 1.1vw, 22px);
+      color: rgba(118, 92, 95, 0.48);
+      opacity: 1;
+      pointer-events: none;
+      font-size: clamp(10px, 0.68vw, 13px);
+    }
+
+    .select-screen.cover-exact .question-panel .primary-btn {
+      align-self: center;
+      justify-self: stretch;
+      min-height: clamp(40px, 4.1vw, 72px);
+      padding: 0 clamp(12px, 1vw, 18px);
+      border: 0;
+      color: rgba(71, 48, 51, 0.9);
+      background: linear-gradient(135deg, rgba(237, 205, 199, 0.95), rgba(207, 155, 146, 0.82));
+      box-shadow: 0 10px 24px rgba(148, 91, 88, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.48);
+      font-size: clamp(13px, 0.92vw, 18px);
+    }
+
+    .select-screen.cover-exact .question-summary {
+      position: absolute;
+      left: 17.2%;
+      top: 30.2%;
+      z-index: 34;
+      width: 28%;
+      padding: 3px 8px;
+      border: 0;
+      border-radius: 999px;
+      color: rgba(108, 78, 84, 0.72);
+      background: rgba(255, 252, 248, 0.42);
+      box-shadow: none;
+      font-size: clamp(10px, 0.66vw, 13px);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      backdrop-filter: blur(6px);
+    }
+
+    .select-screen.cover-exact .ring-stage {
+      position: absolute;
+      left: 17.4%;
+      top: 35.1%;
+      z-index: 18;
+      width: 65.6%;
+      height: 40.8%;
+      min-height: 0;
+      overflow: visible;
+      perspective: 2400px;
+    }
+
+    .select-screen.cover-exact .ring-stage.locked {
+      opacity: 1;
+      filter: none;
+    }
+
+    .select-screen.cover-exact .ring-stage.locked::after {
+      display: none;
+    }
+
+    .select-screen.cover-exact .fate-flow {
+      position: absolute;
+      left: 17.4%;
+      top: 35.1%;
+      z-index: 16;
+      width: 65.6%;
+      height: 40.8%;
+      pointer-events: none;
+      overflow: visible;
+      mix-blend-mode: screen;
+      opacity: 0.78;
+    }
+
+    .select-screen.cover-exact .fate-flow .flow-orbit {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.56);
+      stroke-width: 1.15;
+      stroke-linecap: round;
+      stroke-dasharray: 86 620;
+      filter: drop-shadow(0 0 7px rgba(255, 255, 255, 0.74)) drop-shadow(0 0 16px rgba(255, 255, 255, 0.34));
+      animation: fateFlowDash 13s linear infinite;
+    }
+
+    .select-screen.cover-exact .fate-flow .flow-orbit.is-soft {
+      stroke: rgba(255, 255, 255, 0.34);
+      stroke-width: 0.82;
+      stroke-dasharray: 54 480;
+      animation-duration: 18s;
+      animation-direction: reverse;
+    }
+
+    .select-screen.cover-exact .fate-flow .flow-arc {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.38);
+      stroke-width: 0.82;
+      stroke-linecap: round;
+      stroke-dasharray: 48 360;
+      filter: drop-shadow(0 0 7px rgba(255, 255, 255, 0.62));
+      animation: fateFlowDash 16s linear infinite reverse;
+    }
+
+    .select-screen.cover-exact .fate-flow .flow-star {
+      fill: rgba(255, 255, 255, 0.86);
+      filter: drop-shadow(0 0 9px rgba(255, 255, 255, 0.8));
+      animation: fateFlowPulse 3.8s ease-in-out infinite;
+      transform-origin: center;
+    }
+
+    .select-screen.cover-exact .fate-flow .flow-star:nth-of-type(2n) {
+      animation-delay: -1.4s;
+    }
+
+    .select-screen.cover-exact .fate-flow .flow-star:nth-of-type(3n) {
+      animation-delay: -2.2s;
+    }
+
+    @keyframes fateFlowDash {
+      to {
+        stroke-dashoffset: -706;
+      }
+    }
+
+    @keyframes fateFlowPulse {
+      0%, 100% {
+        opacity: 0.38;
+        transform: scale(0.82);
+      }
+      45% {
+        opacity: 0.92;
+        transform: scale(1.18);
+      }
+    }
+
+    .select-screen.cover-exact:not(.question-started) .tarot-card {
+      opacity: 0.24 !important;
+      pointer-events: none;
+    }
+
+    .select-screen.cover-exact:not(.question-started) .slot > * {
+      opacity: 1;
+    }
+
+    .select-screen.cover-exact .slot.empty > * {
+      opacity: 1;
+    }
+
+    .select-screen.cover-exact .tarot-card {
+      border-color: rgba(255, 250, 246, 0.58);
+      background: rgba(255, 255, 255, 0.12);
+      box-shadow: 0 22px 38px rgba(116, 91, 96, 0.09), 0 0 32px rgba(255, 255, 255, 0.16);
+      opacity: 0.26;
+      filter: saturate(0.72) brightness(1.12) contrast(0.82);
+    }
+
+    .select-screen.cover-exact .tarot-card.focused {
+      opacity: 0.52;
+      filter: saturate(0.78) brightness(1.22) contrast(0.88);
+    }
+
+    .select-screen.cover-exact .tarot-card.focused::before {
+      border-color: rgba(255, 255, 255, 0.82);
+      box-shadow: 0 0 24px rgba(255, 255, 255, 0.52), inset 0 0 18px rgba(255, 255, 255, 0.2);
+    }
+
+    .select-screen.cover-exact .card-fallback {
+      color: rgba(112, 84, 88, 0.58);
+      background:
+        linear-gradient(150deg, rgba(255, 255, 255, 0.32), transparent 42%),
+        linear-gradient(rgba(225, 191, 193, 0.12), rgba(255, 255, 255, 0.14)),
+        rgba(245, 235, 231, 0.22);
+    }
+
+    .select-screen.cover-exact .energy-ring::before,
+    .select-screen.cover-exact .energy-ring::after {
+      border-color: rgba(255, 255, 255, 0.2);
+      border-top-color: rgba(255, 255, 255, 0.92);
+    }
+
+    .select-screen.cover-exact .spark {
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 0 16px rgba(255, 255, 255, 0.74);
+    }
+
+    .select-screen.cover-exact .gesture-panel {
+      left: 3%;
+      bottom: 5.7%;
+      z-index: 46;
+      width: 12.9%;
+      min-width: 154px;
+      padding: 0;
+      border: 0;
+      border-radius: 18px;
+      background: transparent;
+      box-shadow: none;
+      backdrop-filter: none;
+    }
+
+    .select-screen.cover-exact .gesture-video {
+      border: 1px solid rgba(255, 255, 255, 0.68);
+      border-radius: 16px 16px 9px 9px;
+      opacity: 0.72;
+      filter: saturate(0.58) contrast(0.82) brightness(1.12);
+      box-shadow: 0 18px 42px rgba(112, 92, 96, 0.16);
+    }
+
+    .select-screen.cover-exact .gesture-overlay {
+      left: 0;
+      top: 0;
+      width: 100%;
+      border-radius: 16px 16px 9px 9px;
+    }
+
+    .select-screen.cover-exact .gesture-status {
+      left: 5.5%;
+      right: 5.5%;
+      bottom: -27%;
+      min-height: clamp(30px, 2.8vw, 46px);
+      justify-content: center;
+      border: 1px solid rgba(224, 205, 205, 0.74);
+      border-radius: 10px;
+      color: rgba(150, 101, 109, 0.86);
+      background: rgba(255, 255, 255, 0.78);
+      box-shadow: 0 10px 24px rgba(160, 117, 123, 0.12);
+      font-size: clamp(12px, 0.8vw, 15px);
+      backdrop-filter: blur(12px);
+    }
+
+    .select-screen.cover-exact .gesture-dot {
+      width: 7px;
+      height: 7px;
+      background: rgba(183, 96, 110, 0.58);
+      box-shadow: none;
+    }
+
+    .select-screen.cover-exact .gesture-panel.tracking .gesture-dot {
+      background: rgba(183, 96, 110, 0.82);
+      box-shadow: 0 0 12px rgba(183, 96, 110, 0.34);
+    }
+
+    .select-screen.cover-exact .slots {
+      position: absolute;
+      left: 21.4%;
+      bottom: 5.65%;
+      z-index: 32;
+      width: 57.2%;
+      gap: 2.7%;
+    }
+
+    .select-screen.cover-exact .slot {
+      min-height: clamp(92px, 8.8vw, 150px);
+      grid-template-columns: 25% 1fr;
+      gap: 4%;
+      padding: 3.6% 5%;
+      border: 1px solid rgba(176, 136, 139, 0.24);
+      border-radius: 18px;
+      background: rgba(255, 252, 248, 0.64);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.44), 0 16px 34px rgba(122, 96, 100, 0.1);
+      backdrop-filter: blur(12px);
+    }
+
+    .select-screen.cover-exact .slot-thumb {
+      width: clamp(42px, 4.4vw, 78px);
+      height: clamp(62px, 6.4vw, 110px);
+      border: 1px solid rgba(180, 143, 147, 0.22);
+      color: rgba(119, 92, 96, 0.55);
+      background: rgba(255, 255, 255, 0.36);
+      opacity: 0.86;
+    }
+
+    .select-screen.cover-exact .slot.empty .slot-thumb::before {
+      content: "";
+      width: 34%;
+      aspect-ratio: 1;
+      border: 1px solid rgba(180, 143, 147, 0.22);
+      transform: rotate(45deg);
+      box-shadow: inset 0 0 0 8px rgba(255, 255, 255, 0.18);
+    }
+
+    .select-screen.cover-exact .slot-thumb img {
+      border-radius: 8px;
+      filter: saturate(0.78) brightness(1.08) contrast(0.9);
+      box-shadow: 0 8px 20px rgba(126, 94, 99, 0.14);
+    }
+
+    .select-screen.cover-exact .slot-role {
+      color: rgba(91, 68, 72, 0.86);
+      font-size: clamp(18px, 1.6vw, 30px);
+      letter-spacing: 0.08em;
+    }
+
+    .select-screen.cover-exact .slot-name {
+      min-height: auto;
+      margin-top: 6px;
+      color: rgba(118, 92, 95, 0.58);
+      font-size: clamp(12px, 0.86vw, 17px);
+    }
+
+    .select-screen.cover-exact .slot.filled .slot-name {
+      margin-top: 0;
+      color: rgba(91, 68, 72, 0.86);
+      font-size: clamp(12px, 0.78vw, 15px);
+      line-height: 1.28;
+    }
+
+    .select-screen.cover-exact .badge {
+      color: rgba(108, 78, 84, 0.78);
+      border-color: rgba(206, 169, 174, 0.36);
+      background: rgba(255, 255, 255, 0.32);
+    }
+
+    .flying-card {
+      position: fixed;
+      z-index: 80;
+      width: var(--card-w);
+      height: var(--card-h);
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(242, 215, 122, 0.86);
+      pointer-events: none;
+      box-shadow: 0 0 44px rgba(212, 175, 55, 0.4);
+      transition: transform 820ms var(--ease), opacity 820ms var(--ease);
+    }
+
+    .reading-screen {
+      position: absolute;
+      overflow: auto;
+      grid-template-rows: auto auto auto auto auto 1fr;
+      align-content: start;
+      gap: 18px;
+      padding: clamp(28px, 3.4vw, 58px) clamp(34px, 5.2vw, 92px) 54px;
+      color: rgba(82, 62, 64, 0.92);
+      background:
+        linear-gradient(90deg, rgba(255, 252, 248, 0.9), rgba(255, 252, 248, 0.54) 52%, rgba(236, 230, 226, 0.2)),
+        linear-gradient(rgba(255, 255, 255, 0.28), rgba(255, 252, 248, 0.72)),
+        url("./assets/fate-ring-cover-clean.jpg") center / cover no-repeat;
+    }
+
+    .reading-screen::before {
+      content: "";
+      position: fixed;
+      left: 0;
+      top: 0;
+      right: 0;
+      height: clamp(150px, 18vh, 230px);
+      z-index: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, rgba(255, 252, 248, 0.98) 0%, rgba(255, 252, 248, 0.94) 52%, rgba(255, 252, 248, 0.48) 82%, rgba(255, 252, 248, 0.08) 100%),
+        linear-gradient(rgba(255, 252, 248, 0.98), rgba(255, 252, 248, 0.72) 74%, rgba(255, 252, 248, 0));
+      backdrop-filter: blur(2px);
+    }
+
+    .reading-screen > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .reading-header {
+      max-width: 1320px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .reading-screen .title-kicker {
+      color: rgba(93, 69, 73, 0.72);
+      letter-spacing: 0.34em;
+      font-size: clamp(11px, 0.76vw, 15px);
+    }
+
+    .reading-screen h1 {
+      max-width: none;
+      color: rgba(70, 49, 53, 0.92);
+      font-family: Georgia, "Times New Roman", "Songti SC", "STSong", serif;
+      font-weight: 500;
+      font-size: clamp(38px, 4.4vw, 78px);
+      line-height: 1.02;
+      text-shadow: 0 12px 32px rgba(164, 126, 126, 0.14);
+    }
+
+    .reading-screen .icon-btn {
+      color: rgba(72, 55, 59, 0.86);
+      border-color: rgba(86, 72, 75, 0.44);
+      background: rgba(255, 255, 255, 0.18);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24), 0 10px 26px rgba(117, 91, 94, 0.1);
+      backdrop-filter: blur(10px);
+    }
+
+    .reading-screen .reading-question {
+      width: min(1320px, 100%);
+      padding: 12px 18px;
+      border-color: rgba(162, 124, 126, 0.18);
+      border-radius: 8px;
+      color: rgba(80, 60, 63, 0.86);
+      background: rgba(255, 255, 255, 0.42);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.44), 0 14px 34px rgba(120, 96, 98, 0.06);
+      backdrop-filter: blur(18px);
+    }
+
+    .reading-screen .question-label {
+      color: rgba(86, 62, 66, 0.9);
+      font-size: 14px;
+      letter-spacing: 0.04em;
+    }
+
+    .reading-screen .ai-badge,
+    .reading-screen .badge {
+      min-height: 24px;
+      border-color: rgba(172, 129, 134, 0.16);
+      color: rgba(94, 69, 72, 0.82);
+      background: rgba(232, 210, 211, 0.52);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+    }
+
+    .reading-screen .primary-btn {
+      color: rgba(57, 43, 45, 0.92);
+      border-color: rgba(184, 143, 117, 0.24);
+      background: linear-gradient(135deg, rgba(238, 215, 190, 0.96), rgba(216, 178, 154, 0.82));
+      box-shadow: 0 14px 28px rgba(139, 100, 87, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.52);
+    }
+
+    .reading-grid {
+      width: min(1320px, 100%);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .reading-card,
+    .reading-block,
+    .summary-block,
+    .followup-panel {
+      border: 1px solid rgba(162, 124, 126, 0.2);
+      border-radius: 8px;
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.56), rgba(255, 249, 245, 0.34));
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.52), 0 18px 46px rgba(120, 96, 98, 0.08);
+      backdrop-filter: blur(18px);
+    }
+
+    .reading-card {
+      min-height: 170px;
+      padding: 10px 24px;
+      display: grid;
+      grid-template-columns: 108px 1fr;
+      gap: 22px;
+      align-items: center;
+    }
+
+    .reading-card img {
+      width: 98px;
+      height: 150px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid rgba(135, 105, 106, 0.28);
+      background: rgba(245, 235, 230, 0.5);
+      box-shadow: 0 8px 20px rgba(122, 92, 96, 0.14);
+    }
+
+    .reading-role {
+      color: rgba(92, 66, 70, 0.78);
+      letter-spacing: 0.08em;
+      font-size: 15px;
+    }
+
+    .reading-name {
+      margin: 10px 0 5px;
+      color: rgba(73, 52, 56, 0.94);
+      font-family: Georgia, "Times New Roman", "Songti SC", "STSong", serif;
+      font-size: 28px;
+      line-height: 1.2;
+      font-weight: 500;
+    }
+
+    .reading-en {
+      color: rgba(117, 91, 94, 0.7);
+      font-size: 15px;
+    }
+
+    .interpretations {
+      width: min(1320px, 100%);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .reading-block {
+      padding: 22px 26px;
+    }
+
+    .reading-block h2,
+    .summary-block h2,
+    .followup-panel h2 {
+      margin: 0 0 12px;
+      color: rgba(82, 58, 62, 0.92);
+      font-family: Georgia, "Times New Roman", "Songti SC", "STSong", serif;
+      font-size: 20px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+    }
+
+    .reading-block p,
+    .summary-block p,
+    .followup-panel p {
+      margin: 0;
+      color: rgba(75, 58, 61, 0.86);
+      line-height: 1.74;
+      font-size: 15px;
+    }
+
+    .answer-section {
+      display: grid;
+      gap: 7px;
+      padding: 12px 0;
+      border-top: 1px solid rgba(153, 117, 119, 0.16);
+    }
+
+    .answer-section:first-child {
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    .answer-section strong {
+      color: rgba(77, 55, 59, 0.95);
+      font-size: 14px;
+      letter-spacing: 0.04em;
+    }
+
+    .summary-block {
+      width: min(1320px, 100%);
+      margin: 0 auto;
+      padding: 22px 28px;
+    }
+
+    .followup-panel {
+      width: min(1320px, 100%);
+      padding: 22px 28px;
+    }
+
+    .followup-list {
+      display: grid;
+      gap: 12px;
+      max-height: 280px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .followup-empty {
+      color: rgba(117, 91, 94, 0.68);
+      font-size: 14px;
+    }
+
+    .followup-message {
+      display: grid;
+      gap: 6px;
+      padding: 10px 12px;
+      border: 1px solid rgba(153, 117, 119, 0.18);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.34);
+    }
+
+    .followup-message.user {
+      border-color: rgba(171, 130, 134, 0.26);
+      background: rgba(245, 224, 225, 0.28);
+    }
+
+    .followup-speaker {
+      color: rgba(84, 60, 64, 0.88);
+      font-size: 12px;
+      letter-spacing: 0.1em;
+    }
+
+    .followup-form {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: end;
+      margin-top: 14px;
+    }
+
+    .followup-input {
+      min-height: 42px;
+      padding: 0 12px;
+    }
+
+    .reading-screen .followup-form label {
+      color: rgba(82, 58, 62, 0.84);
+      font-size: 14px;
+      letter-spacing: 0.04em;
+    }
+
+    .reading-screen .followup-input {
+      border-color: rgba(153, 117, 119, 0.24);
+      color: rgba(75, 58, 61, 0.9);
+      background: rgba(255, 255, 255, 0.3);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.36);
+    }
+
+    .reading-screen .followup-input::placeholder {
+      color: rgba(117, 91, 94, 0.52);
+    }
+
+    .reading-screen .followup-input:focus {
+      border-color: rgba(178, 131, 137, 0.44);
+      box-shadow: 0 0 0 3px rgba(214, 180, 184, 0.18);
+    }
+
+    .reading-actions {
+      width: min(1320px, 100%);
+      margin: 0 auto;
+      display: flex;
+      justify-content: center;
+      padding-bottom: 18px;
+    }
+
+    @media (max-width: 860px) {
+      :root {
+        --card-w: 82px;
+        --card-h: 139px;
+        --ring-radius: 330px;
+      }
+
+      body { overflow: auto; }
+
+      .app {
+        min-height: 100dvh;
+        height: auto;
+      }
+
+      .screen {
+        min-height: 100dvh;
+        position: relative;
+        padding: 20px 14px;
+      }
+
+      .topbar,
+      .reading-header {
+        grid-template-columns: 1fr;
+        display: grid;
+      }
+
+      .toolbar { justify-content: end; }
+
+      .ring-stage { min-height: 350px; }
+
+      .question-panel,
+      .followup-form {
+        grid-template-columns: 1fr;
+      }
+
+      .ai-settings {
+        grid-template-columns: 1fr;
+      }
+
+      .slots,
+      .reading-grid,
+      .interpretations {
+        grid-template-columns: 1fr;
+      }
+
+      .slot {
+        min-height: 96px;
+      }
+
+      .gesture-panel {
+        left: 14px;
+        bottom: 14px;
+        width: 126px;
+      }
+
+      .gesture-status {
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+        min-height: 20px;
+        font-size: 11px;
+      }
+
+      .reading-card {
+        grid-template-columns: 72px 1fr;
+      }
+
+      .reading-card img {
+        width: 72px;
+        height: 116px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app cover-exact">
+    <canvas class="particle-canvas" id="particleCanvas" aria-hidden="true"></canvas>
+    <div class="particle-placeholder" aria-hidden="true"></div>
+    <svg class="magic-sigil" viewBox="0 0 500 500" aria-hidden="true">
+      <circle cx="250" cy="250" r="225" fill="none" stroke="#d4af37" stroke-width="1.2" />
+      <circle cx="250" cy="250" r="174" fill="none" stroke="#d4af37" stroke-width="0.9" />
+      <circle cx="250" cy="250" r="91" fill="none" stroke="#d4af37" stroke-width="0.8" />
+      <path d="M250 31 L439 359 L61 359 Z" fill="none" stroke="#d4af37" stroke-width="1" />
+      <path d="M250 469 L61 141 L439 141 Z" fill="none" stroke="#d4af37" stroke-width="1" />
+      <path d="M250 72 L278 217 L421 250 L278 283 L250 428 L222 283 L79 250 L222 217 Z" fill="none" stroke="#d4af37" stroke-width="0.9" />
+      <g stroke="#d4af37" stroke-width="0.8" fill="none">
+        <path d="M250 25 V475" />
+        <path d="M25 250 H475" />
+        <path d="M91 91 L409 409" />
+        <path d="M409 91 L91 409" />
+      </g>
+    </svg>
+
+    <section class="screen select-screen cover-exact active" id="selectScreen">
+      <header class="topbar">
+        <div>
+          <p class="title-kicker">THE FATE RING</p>
+          <h1>选择三张属于你的宿命之牌</h1>
+        </div>
+        <div class="toolbar">
+          <button class="icon-btn" id="fullscreenBtn" type="button" title="全屏">FS</button>
+        </div>
+      </header>
+
+      <form class="question-panel" id="questionForm" autocomplete="off">
+        <div class="question-field">
+          <label for="questionInput">你的问题</label>
+          <textarea class="question-input" id="questionInput" maxlength="160" autocomplete="off" spellcheck="false" placeholder="例如：最近三个月的事业运怎么样"></textarea>
+          <input id="deepseekModelInput" type="hidden" value="deepseek-chat" />
+          <div class="question-hint" id="questionHint">请先写下你想询问的主题，命运之轮才会开始回应。</div>
+        </div>
+        <button class="primary-btn" id="startReadingBtn" type="submit" disabled>开始占卜</button>
+      </form>
+
+      <section class="question-summary" id="questionSummary" aria-live="polite"></section>
+
+      <svg class="fate-flow" viewBox="0 0 1000 520" preserveAspectRatio="none" aria-hidden="true">
+        <ellipse class="flow-orbit" cx="500" cy="332" rx="410" ry="124" />
+        <ellipse class="flow-orbit is-soft" cx="500" cy="330" rx="315" ry="88" />
+        <ellipse class="flow-orbit is-soft" cx="500" cy="260" rx="122" ry="220" />
+        <path class="flow-arc" d="M134 382 C276 230 706 214 872 374" />
+        <path class="flow-arc" d="M150 283 C332 390 670 384 848 282" />
+        <path class="flow-arc" d="M222 440 C430 300 572 296 780 438" />
+        <circle class="flow-star" cx="94" cy="334" r="2.8" />
+        <circle class="flow-star" cx="188" cy="276" r="1.9" />
+        <circle class="flow-star" cx="322" cy="382" r="2.2" />
+        <circle class="flow-star" cx="500" cy="440" r="2.4" />
+        <circle class="flow-star" cx="686" cy="382" r="2" />
+        <circle class="flow-star" cx="812" cy="276" r="1.9" />
+        <circle class="flow-star" cx="910" cy="334" r="2.8" />
+      </svg>
+
+      <section class="ring-stage locked" id="ringStage" aria-label="3D塔罗牌环，拖拽旋转，长按聚焦卡牌选牌">
+        <div class="ring" id="ring"></div>
+      </section>
+
+      <aside class="gesture-panel active" id="gesturePanel" aria-live="polite">
+        <video class="gesture-video" id="gestureVideo" playsinline muted></video>
+        <canvas class="gesture-overlay" id="gestureOverlay" aria-hidden="true"></canvas>
+        <div class="gesture-status">
+          <span class="gesture-dot" aria-hidden="true"></span>
+          <span id="gestureStatus">正在启动手势识别</span>
+        </div>
+      </aside>
+
+      <section class="slots" id="slots" aria-label="已选择的三张牌"></section>
+    </section>
+
+    <section class="screen reading-screen" id="readingScreen">
+      <header class="reading-header">
+        <div>
+          <p class="title-kicker">DESTINY READING</p>
+          <h1>过去，现在，未来的命运回声</h1>
+        </div>
+        <div class="toolbar">
+          <button class="icon-btn" id="readingFullscreenBtn" type="button" title="全屏">FS</button>
+        </div>
+      </header>
+
+      <section class="reading-question" id="readingQuestion"></section>
+      <section class="reading-grid" id="readingCards"></section>
+      <section class="interpretations" id="readingBlocks"></section>
+      <section class="summary-block" id="summaryBlock"></section>
+      <section class="followup-panel">
+        <h2>继续追问</h2>
+        <div class="followup-list" id="followUpList"></div>
+        <form class="followup-form" id="followUpForm" autocomplete="off">
+          <div>
+            <label for="followUpInput">追问问题</label>
+            <input class="followup-input" id="followUpInput" type="text" maxlength="140" autocomplete="off" name="fate-ring-followup-question" list="recentQuestionOptions" placeholder="例如：我下一步具体该怎么做？" />
+            <datalist id="recentQuestionOptions"></datalist>
+          </div>
+          <button class="primary-btn" type="submit">追问</button>
+        </form>
+      </section>
+      <div class="reading-actions">
+        <button class="primary-btn api-retry-btn" id="regenerateBtn" type="button">重新生成解读</button>
+        <button class="primary-btn" id="resetBtn" type="button">重新占卜</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const CONFIG = {
+      cardCount: 28,
+      radius: 580,
+      tiltX: -17,
+      dragSensitivity: 0.22,
+      gestureSensitivity: 265,
+      inertia: 0.92,
+      holdMs: 1400
+    };
+
+    const POSITIONS = ["过去", "现在", "未来"];
+    const MAJOR = [
+      ["maj-TheFool", "愚者", "The Fool"],
+      ["maj-TheMagician", "魔术师", "The Magician"],
+      ["maj-TheHighPriestess", "女祭司", "The High Priestess"],
+      ["maj-TheEmpress", "皇后", "The Empress"],
+      ["maj-TheEmperor", "皇帝", "The Emperor"],
+      ["maj-TheHierophant", "教皇", "The Hierophant"],
+      ["maj-TheLovers", "恋人", "The Lovers"],
+      ["maj-TheChariot", "战车", "The Chariot"],
+      ["maj-Strength", "力量", "Strength"],
+      ["maj-TheHermit", "隐者", "The Hermit"],
+      ["maj-WheelOfFortune", "命运之轮", "Wheel of Fortune"],
+      ["maj-Justice", "正义", "Justice"],
+      ["maj-TheHangedMan", "倒吊人", "The Hanged Man"],
+      ["maj-Death", "死神", "Death"],
+      ["maj-Temperance", "节制", "Temperance"],
+      ["maj-TheDevil", "恶魔", "The Devil"],
+      ["maj-TheTower", "高塔", "The Tower"],
+      ["maj-TheStar", "星星", "The Star"],
+      ["maj-TheMoon", "月亮", "The Moon"],
+      ["maj-TheSun", "太阳", "The Sun"],
+      ["maj-Judgement", "审判", "Judgement"],
+      ["maj-TheWorld", "世界", "The World"]
+    ];
+
+    const SUITS = [
+      ["wands", "权杖", "Wands"],
+      ["cups", "圣杯", "Cups"],
+      ["swords", "宝剑", "Swords"],
+      ["pentacles", "星币", "Pentacles"]
+    ];
+    const RANKS = [
+      ["Ace", "王牌"],
+      ["Two", "二"],
+      ["Three", "三"],
+      ["Four", "四"],
+      ["Five", "五"],
+      ["Six", "六"],
+      ["Seven", "七"],
+      ["Eight", "八"],
+      ["Nine", "九"],
+      ["Ten", "十"],
+      ["Page", "侍从"],
+      ["Knight", "骑士"],
+      ["Queen", "王后"],
+      ["King", "国王"]
+    ];
+
+    const TAROT_DECK = [
+      ...MAJOR.map(([id, cn, en]) => ({ id, cn, en, arcana: "大阿卡纳" })),
+      ...SUITS.flatMap(([suitId, suitCn, suitEn]) =>
+        RANKS.map(([rankEn, rankCn]) => ({
+          id: `${suitId}-${rankEn}`,
+          cn: `${suitCn}${rankCn}`,
+          en: `${rankEn} of ${suitEn}`,
+          arcana: "小阿卡纳"
+        }))
+      )
+    ];
+
+    const selectScreen = document.getElementById("selectScreen");
+    const readingScreen = document.getElementById("readingScreen");
+    const questionForm = document.getElementById("questionForm");
+    const questionInput = document.getElementById("questionInput");
+    const deepseekModelInput = document.getElementById("deepseekModelInput");
+    const questionHint = document.getElementById("questionHint");
+    const startReadingBtn = document.getElementById("startReadingBtn");
+    const questionSummary = document.getElementById("questionSummary");
+    const readingQuestion = document.getElementById("readingQuestion");
+    const ringStage = document.getElementById("ringStage");
+    const ring = document.getElementById("ring");
+    const slots = document.getElementById("slots");
+    const readingCards = document.getElementById("readingCards");
+    const readingBlocks = document.getElementById("readingBlocks");
+    const summaryBlock = document.getElementById("summaryBlock");
+    const followUpList = document.getElementById("followUpList");
+    const followUpForm = document.getElementById("followUpForm");
+    const followUpInput = document.getElementById("followUpInput");
+    const recentQuestionOptions = document.getElementById("recentQuestionOptions");
+    const gesturePanel = document.getElementById("gesturePanel");
+    const gestureVideo = document.getElementById("gestureVideo");
+    const gestureOverlay = document.getElementById("gestureOverlay");
+    const gestureOverlayCtx = gestureOverlay.getContext("2d");
+    const gestureStatus = document.getElementById("gestureStatus");
+    const fullscreenBtn = document.getElementById("fullscreenBtn");
+    const readingFullscreenBtn = document.getElementById("readingFullscreenBtn");
+    const regenerateBtn = document.getElementById("regenerateBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const particleCanvas = document.getElementById("particleCanvas");
+
+    let ringCards = [];
+    let selected = [];
+    let currentQuestion = "";
+    let questionDomain = "通用";
+    let readingHistory = [];
+    let currentReading = null;
+    let aiBusy = false;
+    const RECENT_QUESTIONS_KEY = "fateRingRecentQuestions";
+    let recentQuestions = loadRecentQuestions();
+    let rotation = 0;
+    let velocity = 0;
+    let focusedIndex = 0;
+    let isDragging = false;
+    let lastX = 0;
+    let rafId = 0;
+    let holdTimer = 0;
+    let holdingCard = null;
+    let dragMoved = false;
+    let hands = null;
+    let camera = null;
+    let gestureActive = false;
+    let gestureLastX = null;
+    let gestureLastAt = 0;
+    let gestureHoldStart = 0;
+    let gestureSelectingEl = null;
+    let gestureSelectingIndex = null;
+    let gestureCooldownUntil = 0;
+    const HAND_CONNECTIONS = [
+      [0, 1], [1, 2], [2, 3], [3, 4],
+      [0, 5], [5, 6], [6, 7], [7, 8],
+      [0, 9], [9, 10], [10, 11], [11, 12],
+      [0, 13], [13, 14], [14, 15], [15, 16],
+      [0, 17], [17, 18], [18, 19], [19, 20],
+      [5, 9], [9, 13], [13, 17]
+    ];
+
+    function imagePath(card) {
+      return `./back/${card.id}.jpg`;
+    }
+
+    function backPath(index) {
+      return `./back/back${(index % 7) + 1}.png`;
+    }
+
+    function loadRecentQuestions() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(RECENT_QUESTIONS_KEY) || "[]");
+        return Array.isArray(parsed)
+          ? parsed.filter(item => typeof item === "string" && item.trim()).slice(0, 8)
+          : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function renderRecentQuestionOptions() {
+      if (!recentQuestionOptions) return;
+      recentQuestionOptions.innerHTML = recentQuestions
+        .map(question => `<option value="${escapeHtml(question)}"></option>`)
+        .join("");
+    }
+
+    function rememberRecentQuestion(question) {
+      const clean = question.trim();
+      if (!clean) return;
+      recentQuestions = [clean, ...recentQuestions.filter(item => item !== clean)].slice(0, 8);
+      try {
+        localStorage.setItem(RECENT_QUESTIONS_KEY, JSON.stringify(recentQuestions));
+      } catch {
+        // Ignore storage failures; the app should still work without history.
+      }
+      renderRecentQuestionOptions();
+    }
+
+    function shuffleDeck() {
+      return TAROT_DECK
+        .map(card => ({ ...card, sort: Math.random(), reversed: Math.random() > 0.5 }))
+        .sort((a, b) => a.sort - b.sort)
+        .slice(0, CONFIG.cardCount);
+    }
+
+    function createImage(src, alt) {
+      const img = document.createElement("img");
+      img.src = src;
+      img.alt = alt;
+      img.loading = "lazy";
+      img.onerror = () => {
+        img.style.display = "none";
+      };
+      return img;
+    }
+
+    function renderSlots() {
+      slots.innerHTML = "";
+      POSITIONS.forEach((role, index) => {
+        const card = selected[index];
+        const slot = document.createElement("article");
+        slot.className = `slot ${card ? "filled" : "empty"}`;
+        slot.dataset.slot = String(index);
+        const thumb = document.createElement("div");
+        thumb.className = "slot-thumb";
+        if (card) {
+          thumb.appendChild(createImage(imagePath(card), card.cn));
+        } else {
+          thumb.setAttribute("aria-hidden", "true");
+        }
+        const meta = document.createElement("div");
+        meta.innerHTML = card
+          ? `
+            <div class="slot-role">${role}</div>
+            <div class="slot-name">${card.cn}<br>${card.en}</div>
+            <span class="badge">${card.reversed ? "逆位" : "正位"}</span>
+          `
+          : `
+            <div class="slot-role">${role}</div>
+            <div class="slot-name">等待命运落位</div>
+          `;
+        slot.append(thumb, meta);
+        slots.appendChild(slot);
+      });
+    }
+
+    function updateQuestionGate() {
+      const hasQuestion = currentQuestion.trim().length > 0;
+      selectScreen.classList.toggle("question-started", hasQuestion);
+      ringStage.classList.toggle("locked", !hasQuestion);
+      questionForm.classList.toggle("hidden", hasQuestion);
+      questionSummary.classList.toggle("active", hasQuestion);
+      questionSummary.innerHTML = hasQuestion
+        ? `<span class="question-label">问题 · ${escapeHtml(questionDomain)}</span>${escapeHtml(currentQuestion)}`
+        : "";
+      startReadingBtn.disabled = questionInput.value.trim().length === 0;
+    }
+
+    function beginQuestionReading(question) {
+      currentQuestion = question.trim();
+      rememberRecentQuestion(currentQuestion);
+      questionDomain = classifyQuestion(currentQuestion);
+      readingHistory = [];
+      currentReading = null;
+      selected = [];
+      rotation = 0;
+      velocity = 0;
+      cancelGestureHold();
+      renderSlots();
+      renderRing();
+      updateQuestionGate();
+      questionHint.textContent = `已锁定问题类型：${questionDomain}。现在可以开始选三张牌。`;
+    }
+
+    function renderRing() {
+      ring.innerHTML = "";
+      ringCards = shuffleDeck();
+      ringCards.forEach((card, index) => {
+        const el = document.createElement("button");
+        el.type = "button";
+        el.className = "tarot-card";
+        el.dataset.index = String(index);
+        el.setAttribute("aria-label", `${card.cn} ${card.en}`);
+        el.innerHTML = `
+          <span class="tarot-face card-back">
+            <span class="card-fallback">THE<br>FATE<br>RING</span>
+          </span>
+          <span class="tarot-face card-front">
+            <span class="card-fallback">${card.cn}<br>${card.en}</span>
+          </span>
+          <span class="energy-ring">
+            <span class="spark"></span>
+            <span class="spark"></span>
+            <span class="spark"></span>
+            <span class="spark"></span>
+          </span>
+        `;
+        el.querySelector(".card-back").prepend(createImage(backPath(index), "塔罗牌背面"));
+        el.querySelector(".card-front").prepend(createImage(imagePath(card), card.cn));
+        el.addEventListener("pointerdown", event => beginHold(event, el, index));
+        el.addEventListener("pointerup", cancelHold);
+        el.addEventListener("pointerleave", cancelHold);
+        el.addEventListener("pointercancel", cancelHold);
+        ring.appendChild(el);
+      });
+      updateRing();
+    }
+
+    function normalizeAngle(angle) {
+      return ((angle % 360) + 360) % 360;
+    }
+
+    function shortestDelta(angle) {
+      return ((((angle + 180) % 360) + 360) % 360) - 180;
+    }
+
+    function getNearestSelectableIndex(currentRotation = rotation) {
+      const step = 360 / ringCards.length;
+      let nearestIndex = Math.round(normalizeAngle(-currentRotation) / step) % ringCards.length;
+      let nearestDistance = Infinity;
+
+      [...ring.children].forEach((el, index) => {
+        if (el.classList.contains("selected")) return;
+        const distance = Math.abs(shortestDelta(index * step + currentRotation));
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestIndex = index;
+        }
+      });
+
+      return nearestIndex;
+    }
+
+    function updateRing() {
+      const step = 360 / ringCards.length;
+      focusedIndex = getNearestSelectableIndex(rotation);
+      const lift = window.innerWidth < 860 ? -42 : -138;
+      ring.style.transform = `translateY(${lift}px) rotateX(${CONFIG.tiltX}deg) rotateY(${rotation}deg)`;
+      [...ring.children].forEach((el, index) => {
+        const base = index * step;
+        const relative = shortestDelta(base + rotation);
+        const focus = 1 - Math.min(Math.abs(relative) / 110, 1);
+        const scale = 0.82 + focus * 0.32;
+        const opacity = 0.26 + focus * 0.74;
+        const zLift = focus * 52;
+        const radius = window.innerWidth < 860 ? 330 : CONFIG.radius;
+        el.style.transform = `rotateY(${base}deg) translateZ(${radius}px) translateZ(${zLift}px) scale(${scale})`;
+        el.style.opacity = el.classList.contains("selected") ? "0" : opacity.toFixed(2);
+        el.classList.toggle("focused", index === focusedIndex && !el.classList.contains("selected"));
+      });
+    }
+
+    function animate() {
+      if (gestureSelectingEl) {
+        velocity = 0;
+        rafId = requestAnimationFrame(animate);
+        return;
+      }
+      if (!isDragging && Math.abs(velocity) > 0.02) {
+        rotation += velocity;
+        velocity *= CONFIG.inertia;
+        updateRing();
+      } else if (!isDragging) {
+        velocity = 0;
+        snapToNearest();
+      }
+      rafId = requestAnimationFrame(animate);
+    }
+
+    function snapToNearest() {
+      const step = 360 / ringCards.length;
+      const targetIndex = getNearestSelectableIndex(rotation);
+      const targetBase = -targetIndex * step;
+      const target = rotation + shortestDelta(targetBase - rotation);
+      rotation += (target - rotation) * 0.09;
+      if (Math.abs(target - rotation) < 0.02) rotation = target;
+      updateRing();
+    }
+
+    ringStage.addEventListener("pointerdown", event => {
+      isDragging = true;
+      dragMoved = false;
+      lastX = event.clientX;
+      velocity = 0;
+      ringStage.setPointerCapture(event.pointerId);
+    });
+
+    ringStage.addEventListener("pointermove", event => {
+      if (!isDragging) return;
+      const delta = event.clientX - lastX;
+      if (Math.abs(delta) > 3) {
+        dragMoved = true;
+        cancelHold();
+      }
+      velocity = delta * CONFIG.dragSensitivity;
+      rotation += velocity;
+      lastX = event.clientX;
+      updateRing();
+    });
+
+    ringStage.addEventListener("pointerup", event => {
+      isDragging = false;
+      try {
+        ringStage.releasePointerCapture(event.pointerId);
+      } catch (error) {
+        /* Pointer capture may already be released on quick taps. */
+      }
+    });
+
+    ringStage.addEventListener("pointercancel", () => {
+      isDragging = false;
+      cancelHold();
+    });
+
+    function beginHold(event, el, index) {
+      if (!currentQuestion) {
+        questionHint.textContent = "请先输入问题，再开始选牌。";
+        questionInput.focus();
+        return;
+      }
+      if (index !== focusedIndex || selected.length >= 3 || el.classList.contains("selected")) return;
+      holdingCard = el;
+      el.classList.add("holding");
+      holdTimer = window.setTimeout(() => {
+        if (!dragMoved && holdingCard === el) {
+          chooseCard(index, el);
+        }
+      }, CONFIG.holdMs);
+    }
+
+    function cancelHold() {
+      window.clearTimeout(holdTimer);
+      if (holdingCard) holdingCard.classList.remove("holding");
+      holdingCard = null;
+    }
+
+    function chooseCard(index, el) {
+      if (!currentQuestion) {
+        questionHint.textContent = "请先输入问题，再开始选牌。";
+        questionInput.focus();
+        return;
+      }
+      cancelHold();
+      cancelGestureHold();
+      const card = ringCards[index];
+      if (!card || selected.some(item => item.id === card.id)) return;
+      selected.push(card);
+      flyToSlot(card, el, selected.length - 1);
+      el.classList.add("selected");
+      renderSlots();
+      if (selected.length === 3) {
+        window.setTimeout(showReading, 1050);
+      }
+    }
+
+    function flyToSlot(card, sourceEl, slotIndex) {
+      const source = sourceEl.getBoundingClientRect();
+      const slotThumb = slots.querySelector(`[data-slot="${slotIndex}"] .slot-thumb`);
+      const target = slotThumb.getBoundingClientRect();
+      const flyer = document.createElement("div");
+      flyer.className = "flying-card";
+      flyer.appendChild(createImage(imagePath(card), card.cn));
+      flyer.style.left = `${source.left}px`;
+      flyer.style.top = `${source.top}px`;
+      flyer.style.transform = `translate3d(0,0,0) scale(${source.width / 110}) rotate(${card.reversed ? 180 : 0}deg)`;
+      document.body.appendChild(flyer);
+      requestAnimationFrame(() => {
+        const dx = target.left + target.width / 2 - (source.left + source.width / 2);
+        const dy = target.top + target.height / 2 - (source.top + source.height / 2);
+        flyer.style.opacity = "0.92";
+        flyer.style.transform = `translate3d(${dx}px, ${dy}px, 120px) scale(${target.width / 110}) rotate(${card.reversed ? 180 : 0}deg)`;
+      });
+      window.setTimeout(() => flyer.remove(), 900);
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;"
+      }[char]));
+    }
+
+    function classifyQuestion(question) {
+      const categories = [
+        ["感情", ["喜欢", "复合", "关系", "伴侣", "爱情", "暧昧", "他", "她"]],
+        ["事业", ["事业", "工作", "职业", "跳槽", "面试", "项目", "老板", "同事"]],
+        ["学业", ["学业", "考试", "学习", "申请", "论文", "学校"]],
+        ["财务", ["钱", "收入", "投资", "消费", "债务", "财务"]],
+        ["人际", ["人际", "朋友", "家人", "沟通", "冲突", "关系"]],
+        ["自我成长", ["方向", "状态", "焦虑", "选择", "成长", "内心"]]
+      ];
+      const normalized = question.trim().toLowerCase();
+      const scored = categories
+        .map(([domain, keywords]) => ({
+          domain,
+          score: keywords.reduce((total, keyword) => total + (normalized.includes(keyword.toLowerCase()) ? 1 : 0), 0)
+        }))
+        .filter(item => item.score > 0)
+        .sort((a, b) => b.score - a.score);
+      return scored[0] ? scored[0].domain : "通用";
+    }
+
+    function detectQuestionIntent(question) {
+      if (/什么时候|几月|哪.*月|多久|时间|期限|今年|明年|下个月|这个月/.test(question)) return "时间判断";
+      if (/还是|二选一|选哪个|哪一个|先天|后天|天生|努力|命定|人为/.test(question)) return "选择判断";
+      if (/会不会|能不能|有没有|是否|结果|成不成|能成|会成功/.test(question)) return "结果判断";
+      if (/怎么做|怎么办|建议|下一步|如何|行动/.test(question)) return "行动建议";
+      if (/选|选择|A|B|哪个|哪一个|要不要|该不该/.test(question)) return "选择判断";
+      if (/他怎么想|她怎么想|对方|想法|态度|喜欢我吗|在想什么/.test(question)) return "他人视角";
+      if (/风险|注意|小心|阻碍|问题|坑/.test(question)) return "风险提醒";
+      return "综合判断";
+    }
+
+    function extractTimeRange(question) {
+      const months = ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"];
+      const aliases = [
+        ["1月", "一月"], ["2月", "二月"], ["3月", "三月"], ["4月", "四月"],
+        ["5月", "五月"], ["6月", "六月"], ["7月", "七月"], ["8月", "八月"],
+        ["9月", "九月"], ["10月", "十月"], ["11月", "十一月"], ["12月", "十二月"]
+      ];
+      const found = months.filter(month => question.includes(month));
+      aliases.forEach(([alias, normalized]) => {
+        if (question.includes(alias) && !found.includes(normalized)) found.push(normalized);
+      });
+      ["这个月", "下个月", "三个月内", "半年内", "今年", "明年"].forEach(label => {
+        if (question.includes(label) && !found.includes(label)) found.push(label);
+      });
+      return found;
+    }
+
+    function extractChoiceOptions(question) {
+      if (/先天|后天|天生|努力|命定|人为/.test(question)) {
+        return ["先天条件/原始禀赋", "后天选择/行动塑造"];
+      }
+      const cleaned = question.replace(/[？?。！!]/g, "");
+      const match = cleaned.match(/(.{1,18}?)(?:还是|或|或者)(.{1,18})/);
+      if (!match) return [];
+      return [match[1], match[2]]
+        .map(part => part.replace(/^(我|我的|这件事|到底|是|要|该|应该)/g, "").trim())
+        .filter(Boolean)
+        .slice(0, 2);
+    }
+
+    function extractQuestionTarget(question) {
+      if (/事业.*先天|先天.*事业|事业.*后天|后天.*事业/.test(question)) return "事业发展由先天还是后天决定";
+      const targets = [
+        ["找到工作", ["找到工作", "找工作", "拿到offer", "拿 offer", "入职", "面试通过", "录用"]],
+        ["换工作", ["跳槽", "换工作", "换岗", "转行"]],
+        ["关系进展", ["复合", "在一起", "确定关系", "关系发展", "感情发展"]],
+        ["考试或申请结果", ["考试", "上岸", "申请", "录取", "论文", "毕业"]],
+        ["财务改善", ["赚钱", "收入", "投资", "债务", "财务", "存钱"]],
+        ["做出选择", ["选择", "要不要", "该不该", "哪个"]]
+      ];
+      const hit = targets.find(([, keywords]) => keywords.some(keyword => question.includes(keyword)));
+      if (hit) return hit[0];
+      return question.replace(/[？?。！!]/g, "").slice(0, 18) || "这件事";
+    }
+
+    function parseQuestion(question) {
+      const domain = classifyQuestion(question);
+      const intent = detectQuestionIntent(question);
+      const timeRange = extractTimeRange(question);
+      const options = extractChoiceOptions(question);
+      const target = extractQuestionTarget(question);
+      return {
+        original: question,
+        domain,
+        intent,
+        timeRange,
+        options,
+        target,
+        hasTimeRange: timeRange.length > 0
+      };
+    }
+
+    function domainContext(domain) {
+      return {
+        "感情": "关系里的真实感受、边界和投入是否对等",
+        "事业": "机会、判断标准、资源和执行节奏",
+        "学业": "方法、积累、稳定发挥和临场状态",
+        "财务": "风险承受力、欲望管理和现实现金流",
+        "人际": "沟通方式、期待差异和关系里的真实需求",
+        "自我成长": "内在秩序、焦虑来源和下一步选择",
+        "通用": "动机、阻力和下一步行动"
+      }[domain] || "动机、阻力和下一步行动";
+    }
+
+    function questionContext(parsed) {
+      if (parsed.intent === "选择判断" && parsed.options.length >= 2) {
+        return `「${parsed.options[0]}」和「${parsed.options[1]}」之间的权重`;
+      }
+      return domainContext(parsed.domain);
+    }
+
+    function roleGuidance(role) {
+      return {
+        "过去": "它说明你是带着什么旧经验进入这个局面的。",
+        "现在": "它指出你此刻真正卡住的地方。",
+        "未来": "它提示如果继续按现在的方式推进，接下来最容易出现什么趋势。"
+      }[role];
+    }
+
+    function cardSignal(card) {
+      const upright = "这张牌是顺着走的，说明这部分能量比较清楚，适合把它当成可以利用的资源。";
+      const reversed = "这张牌是逆位，重点不是坏结果，而是提醒这里有卡住、误判、拖延或消耗。";
+      return card.reversed ? reversed : upright;
+    }
+
+    function cardDomainMeaning(card, domain) {
+      const meanings = {
+        "TheWheelOfFortune": {
+          "事业": "机会窗口在变化，适合主动捕捉新岗位、推荐、临时开放的机会。",
+          "感情": "关系节奏正在变化，很多事不是靠单方面控制，而是看双方是否顺势回应。"
+        },
+        "SevenOfSwords": {
+          "事业": "需要更聪明地拿信息和调整策略，不适合只靠海投或等公开招聘。",
+          "感情": "关系里可能有回避、试探或信息不透明，需要先看清真实动机。"
+        },
+        "TheTower": {
+          "事业": "旧的求职方式或岗位定位可能不适合了，需要重建策略，而不是继续硬推。",
+          "感情": "关系中的真实问题容易突然暴露，不能继续假装没事。"
+        },
+        "TwoOfSwords": {
+          "事业": "你可能卡在选择和判断上，需要补足信息，而不是一直僵在原地。",
+          "感情": "你在保护自己，也可能因为怕受伤而不愿看见真实答案。"
+        },
+        "KingOfSwords": {
+          "事业": "重点在专业表达、判断力和面试沟通，适合把经历讲得更清楚、更有逻辑。",
+          "感情": "对方或你自己可能更理性克制，情绪不是唯一的判断依据。"
+        },
+        "PageOfSwords": {
+          "事业": "适合主动搜集信息、练习表达和打开新渠道，但结果还需要继续推进。",
+          "感情": "有观察和试探的意味，信息会增加，但关系未必立刻定下来。"
+        }
+      };
+      const domainMeaning = meanings[card.id] && meanings[card.id][domain];
+      if (domainMeaning) return domainMeaning;
+      if (domain === "事业") return card.reversed
+        ? "这张牌在事业里提示卡点、节奏或策略需要调整，不能只靠焦虑推进。"
+        : "这张牌在事业里代表一种可利用的资源或推进方向，关键是把它转成具体行动。";
+      if (domain === "感情") return card.reversed
+        ? "这张牌在感情里提示误会、回避或投入不平衡，需要先看清真实状态。"
+        : "这张牌在感情里代表相对清楚的情绪或互动信号，可以作为判断关系的线索。";
+      return card.reversed
+        ? "这张牌提示这件事里有尚未疏通的阻力，需要先处理卡住的位置。"
+        : "这张牌提示这件事里有可用的力量，可以作为下一步行动的依据。";
+    }
+
+    function orientationText(card) {
+      return card.reversed ? "逆位" : "正位";
+    }
+
+    function intentFrame(parsed) {
+      if (parsed.intent === "时间判断" && parsed.hasTimeRange) {
+        return `你真正想知道的是「${parsed.target}」会落在哪个时间窗口，所以回答必须看 ${parsed.timeRange.join(" / ")} 哪个阶段更有机会。`;
+      }
+      if (parsed.intent === "结果判断") return `你真正想知道的是「${parsed.target}」有没有结果，所以重点不是讲感觉，而是判断推进概率和关键变量。`;
+      if (parsed.intent === "行动建议") return `你真正想知道的是下一步怎么做，所以重点要落到可执行动作，而不是只描述状态。`;
+      if (parsed.intent === "选择判断") return `你真正想比较的是哪条路更值得走，所以重点是各自代价、收益和验证方式。`;
+      if (parsed.intent === "他人视角") return `你真正想知道的是对方态度，所以重点要看对方可能的顾虑、动机和行为信号。`;
+      if (parsed.intent === "风险提醒") return `你真正想知道的是哪里会出问题，所以重点要看风险源和提前避开的方式。`;
+      return `你真正想知道的是「${parsed.target}」接下来怎么发展，所以重点要把趋势和行动讲清楚。`;
+    }
+
+    function roleQuestionFocus(role, parsed, card) {
+      const direction = orientationText(card);
+      if (parsed.intent === "选择判断" && parsed.options.length >= 2) {
+        const [left, right] = parsed.options;
+        return {
+          "过去": `${card.cn}${direction}放在过去，说明「${left}」更像是你的起点和底色：它会影响你，但不等于把结果锁死。`,
+          "现在": `${card.cn}${direction}放在现在，说明真正决定走向的是你此刻怎么回应「${right}」这部分，也就是选择、方法和持续行动。`,
+          "未来": `${card.cn}${direction}放在未来，用来判断如果继续推进，哪一边会被放大；它更像是在看「${right}」能否把「${left}」转化成结果。`
+        }[role];
+      }
+      if (parsed.intent === "时间判断") {
+        const timeLabel = parsed.timeRange[POSITIONS.indexOf(role)] || role;
+        return {
+          "过去": `${card.cn}${direction}放在过去，说明「${parsed.target}」不是突然卡住的，之前已经有信号、尝试或拖延在累积。`,
+          "现在": `${card.cn}${direction}放在现在，重点是判断你此刻离「${parsed.target}」差的是机会、信息、状态，还是执行节奏。`,
+          "未来": `${card.cn}${direction}放在未来，用来观察${timeLabel}附近的趋势强弱，但它不是绝对日期。`
+        }[role];
+      }
+      if (parsed.intent === "结果判断") {
+        return {
+          "过去": `${card.cn}${direction}说明这个结果的根源，通常来自之前的选择、信息差或关系/资源基础。`,
+          "现在": `${card.cn}${direction}指出当下决定结果的关键变量，也就是你现在最该处理的那一环。`,
+          "未来": `${card.cn}${direction}提示如果按现在方式推进，结果最容易往哪个方向走。`
+        }[role];
+      }
+      if (parsed.intent === "行动建议") {
+        return {
+          "过去": `${card.cn}${direction}说明你之前为什么会走到现在这个状态，哪些旧方法可能已经不够用了。`,
+          "现在": `${card.cn}${direction}指出今天最该先动哪一步，不适合继续只停留在想象里。`,
+          "未来": `${card.cn}${direction}提示这一步做下去以后，最容易被放大的机会或阻力。`
+        }[role];
+      }
+      return `${card.cn}${direction}放在${role}，要服务于你问的「${parsed.original}」，不是单独背牌义。${roleGuidance(role)}`;
+    }
+
+    function specificAction(parsed) {
+      if (parsed.intent === "选择判断" && /先天|后天|禀赋|行动/.test(parsed.options.join(""))) {
+        return "别把答案停在“我有没有天赋”。接下来一周做一个后天可控的验证：固定练习/推进一个具体技能，记录反馈；如果反馈变好，说明后天路径正在生效。";
+      }
+      if (parsed.domain === "事业" && /找工作|找到工作|offer|面试|入职/.test(parsed.original)) {
+        return "把目标岗位缩到 2-3 类，重写一版对应岗位要求的简历；接下来 7 天用投递、内推、约人聊岗位三条线同时拿反馈。";
+      }
+      if (parsed.domain === "感情") {
+        return "先分清你想确认的是对方态度、关系进展，还是自己要不要继续投入；下一步用一次清楚表达替代反复试探。";
+      }
+      if (parsed.domain === "财务") {
+        return "先把收入、固定支出、可承受亏损和最坏情况写清楚；任何投资或消费决定都先小额验证。";
+      }
+      if (parsed.domain === "学业") {
+        return "先找出最影响结果的一门/一项任务，把它拆成今天能完成的 30 分钟动作，再用结果反馈调整方法。";
+      }
+      return actionAdvice(parsed.domain);
+    }
+
+    function timelineAdvice(parsed, cards) {
+      if (!parsed.hasTimeRange) return "";
+      const labels = parsed.timeRange.slice(0, 3);
+      const fallback = ["前段", "中段", "后段"];
+      const lines = cards.map((card, index) => {
+        const label = labels[index] || fallback[index];
+        const tone = card.reversed
+          ? "更像是调整、等待反馈或修正方法的阶段"
+          : "更像是可以主动推进、争取机会的阶段";
+        return `${label}：${card.cn}${orientationText(card)}，${tone}。`;
+      });
+      return lines.join(" ");
+    }
+
+    function directConclusion(parsed, cards) {
+      const reversedCount = cards.filter(card => card.reversed).length;
+      if (parsed.intent === "选择判断" && parsed.options.length >= 2) {
+        const [left, right] = parsed.options;
+        const future = cards[2];
+        const tendency = future.reversed ? "目前还没有完全转成结果" : "后续更容易被行动放大";
+        if (/先天|后天|禀赋|行动/.test(`${left}${right}`)) {
+          return `直接回答：更偏「后天选择/行动塑造」，不是纯先天决定。先天条件像底色，会影响起点；但这组三张牌更强调你现在怎么判断、怎么训练、怎么抓机会，未来才会被改写。${future.cn}${orientationText(future)}说明这股后天力量${tendency}。`;
+        }
+        return `直接回答：更偏向「${right}」，但不是完全否定「${left}」。${left}像起点，${right}更像接下来能真正改变局面的变量。`;
+      }
+      if (parsed.intent === "时间判断" && parsed.hasTimeRange) {
+        const activeIndex = cards.findIndex(card => !card.reversed);
+        const chosenIndex = activeIndex >= 0 ? activeIndex : Math.min(1, cards.length - 1);
+        const windowLabel = parsed.timeRange[chosenIndex] || parsed.timeRange[parsed.timeRange.length - 1];
+        return `直接看，${parsed.target}不像是完全没机会；更像是${windowLabel}附近机会感更强。前面的时间更适合调整策略、补信息和制造面试入口。`;
+      }
+      if (parsed.intent === "结果判断") {
+        return reversedCount >= 2
+          ? `直接看，${parsed.target}不是没有可能，但现在阻力偏多，结果取决于你能不能先修正关键卡点。`
+          : `直接看，${parsed.target}有推进空间，但它更像是靠行动争取出来的结果，不是自动发生。`;
+      }
+      if (parsed.intent === "行动建议") {
+        return `直接看，你现在最该做的不是继续想，而是围绕「${parsed.target}」做一个能产生反馈的小动作。`;
+      }
+      return reversedCount >= 2
+        ? `直接看，这件事还有卡点，但卡点是可以被处理的；准确答案不在“等运气”，而在你怎么调整下一步。`
+        : `直接看，这件事有推进感；真正影响结果的，是你能不能把目标、节奏和行动方式对齐。`;
+    }
+
+    function actionAdvice(domain) {
+      return {
+        "感情": "先把你真正想确认的关系问题说清楚：是想知道对方态度，还是想判断自己要不要继续投入。不要一边试探一边期待对方自动给答案。",
+        "事业": "先做一次现实盘点：列出你手里的机会、压力来源、可用资源和最想改变的一件事。下一步不要凭感觉跳，而是先验证一个具体方向。",
+        "学业": "先把目标拆成可执行的复习或申请步骤。与其担心结果，不如确认你现在最薄弱的一环，并给它安排固定时间。",
+        "财务": "先停下冲动决策，把收入、支出、风险和最坏情况写清楚。接下来适合做小额验证，不适合押上全部安全感。",
+        "人际": "先减少猜测，把你真正介意的点说成具体事件。不要用冷处理测试关系，也不要期待别人自动理解你的边界。",
+        "自我成长": "先把脑子里的混乱落到纸上：你在怕什么、想要什么、能立刻做什么。不要要求自己一次想通全部人生方向。",
+        "通用": "先选一个最小动作去验证局面，不要等所有信息都完美才开始。你现在需要的是更清楚的反馈，而不是更多想象。"
+      }[domain] || "先选一个最小动作去验证局面，不要等所有信息都完美才开始。";
+    }
+
+    function avoidAdvice(domain) {
+      return {
+        "感情": "避免把沉默当答案，也避免用反复试探消耗关系。",
+        "事业": "避免被单一权威意见带走，也避免把焦虑误认为必须立刻行动。",
+        "学业": "避免只焦虑结果却不调整方法，也避免临时抱佛脚式地补漏洞。",
+        "财务": "避免为了缓解焦虑而消费或投资，也避免忽略最坏情况下的承受能力。",
+        "人际": "避免用情绪表达替代真实沟通，也避免把所有责任都放到对方身上。",
+        "自我成长": "避免把一时状态当成最终结论，也避免因为怕选错就什么都不选。",
+        "通用": "避免反复问结果却不改变行动。牌给的是方向，不是替你做决定。"
+      }[domain] || "避免反复问结果却不改变行动。";
+    }
+
+    function generateLocalReading(question, cards) {
+      const parsed = parseQuestion(question);
+      const domain = parsed.domain;
+      const single = cards.map((card, index) => {
+        const role = POSITIONS[index];
+        const direction = orientationText(card);
+        return {
+          role,
+          title: `${role} · ${card.cn}`,
+          sections: [
+            {
+              title: "这张牌在说什么",
+              body: `${roleQuestionFocus(role, parsed, card)}${cardDomainMeaning(card, domain)}`
+            },
+            {
+              title: "放回你的问题里",
+              body: `你问的是「${question}」。这张牌在这里要回答的是「${parsed.target}」的${role === "过去" ? "来源" : role === "现在" ? "当前卡点" : "后续走向"}，所以重点落在${questionContext(parsed)}上，而不是泛泛地讲牌义。`
+            },
+            {
+              title: "它的提醒",
+              body: `${cardSignal(card)}${parsed.intent === "时间判断" ? " 时间问题里，它更像是在标记这个阶段的推进强弱，而不是给一个绝对日期。" : ""}`
+            }
+          ]
+        };
+      });
+      const [past, present, future] = cards;
+      const conclusion = directConclusion(parsed, cards);
+      const timeLine = timelineAdvice(parsed, cards);
+      const summarySections = [
+        {
+          title: "一句话结论",
+          body: conclusion
+        },
+        {
+          title: "我先按你的问题来答",
+          body: parsed.intent === "选择判断" && parsed.options.length >= 2
+            ? `你问的是「${question}」。这不是在问事业有没有机会，而是在问「${parsed.options[0]}」和「${parsed.options[1]}」哪一个更主导。我的判断是：${conclusion}`
+            : parsed.hasTimeRange
+            ? `${intentFrame(parsed)}${timeLine ? ` ${timeLine}` : ""}`
+            : `${intentFrame(parsed)}这次抽到的三张牌会分别说明：问题怎么走到现在、当下最该处理什么、后续趋势会被什么放大。`
+        },
+        {
+          title: "这组三张牌的核心主题",
+          body: parsed.intent === "选择判断" && parsed.options.length >= 2
+            ? `${past.cn}、${present.cn}、${future.cn}连在一起看，不是在判定你“命里有没有”，而是在说：${parsed.options[0]}给你起点，${parsed.options[1]}决定它能不能变成现实结果。`
+            : `${past.cn}、${present.cn}、${future.cn}连在一起看，主题不是简单的好或坏，而是围绕「${parsed.target}」和「${domainContext(domain)}」做一次现实校准。`
+        },
+        {
+          title: "过去：发生了什么",
+          body: parsed.intent === "选择判断" && parsed.options.length >= 2
+            ? `${past.cn}${orientationText(past)}说明，${parsed.options[0]}确实存在影响：家庭环境、性格底色、早期资源或天然兴趣，都会影响你开始的位置。但它更像起点，不是终局。`
+            : `${past.cn}${orientationText(past)}说明，你不是突然走到现在的。围绕「${parsed.target}」，之前已经有一些信号、尝试或犹豫在影响你，只是你可能还没有把它们整理成一个明确判断。`
+        },
+        {
+          title: "现在：你真正卡在哪里",
+          body: parsed.intent === "选择判断" && parsed.options.length >= 2
+            ? `${present.cn}${orientationText(present)}指出，现在真正决定差距的不是“天生够不够”，而是你有没有把能力、选择、训练和资源接上。也就是说，${parsed.options[1]}正在成为更关键的变量。`
+            : `${present.cn}${orientationText(present)}指出，当下最重要的不是继续猜结果，而是看清你现在掌握了哪些信息、哪些压力是真的、哪些只是脑子里的反复推演。${domain === "事业" ? "如果这是求职问题，重点就是简历表达、岗位匹配、面试反馈和可用人脉。" : ""}`
+        },
+        {
+          title: "未来：接下来可能怎么发展",
+          body: parsed.intent === "选择判断" && parsed.options.length >= 2
+            ? `${future.cn}${orientationText(future)}提示，未来不是被${parsed.options[0]}单独决定的；如果你持续用${parsed.options[1]}去修正方法、积累反馈，后续趋势会被重新塑造。`
+            : `${future.cn}${orientationText(future)}给出的不是固定命运，而是趋势提醒：如果你继续用现在的方式处理「${parsed.target}」，未来最容易放大的就是这张牌指出的那部分能量。`
+        },
+        {
+          title: "你现在该怎么做",
+          body: parsed.intent === "时间判断" && domain === "事业"
+            ? "如果你问的是几月找到工作，现在不要只等结果。先把岗位方向缩到 2-3 类，重写一版能对应岗位要求的简历，每周固定复盘投递和面试反馈；有推荐渠道就优先用推荐渠道。"
+            : specificAction(parsed)
+        },
+        {
+          title: "需要避免什么",
+          body: avoidAdvice(domain)
+        },
+        {
+          title: "可以追问的方向",
+          body: parsed.intent === "时间判断"
+            ? `你可以继续问：${parsed.timeRange[0] || "前期"}我具体该做什么？哪个阶段风险最大？我应该观察什么信号说明机会快来了？`
+            : "你可以继续问：我下一步具体怎么做？这件事最大的风险是什么？我应该观察什么信号？"
+        }
+      ];
+      return { domain, parsed, single, summarySections, source: "本地兜底" };
+    }
+
+    function aiSettings() {
+      return {
+        model: deepseekModelInput.value || "deepseek-chat"
+      };
+    }
+
+    function cardPayload(cards) {
+      return cards.map((card, index) => ({
+        position: POSITIONS[index],
+        id: card.id,
+        cn: card.cn,
+        en: card.en,
+        orientation: card.reversed ? "逆位" : "正位",
+        arcana: card.arcana
+      }));
+    }
+
+    function aiSystemPrompt() {
+      return [
+        "你是一位会说人话的中文塔罗解读师，也像一个温和但直接的咨询者。",
+        "最高优先级：先回答用户原问题本身，再解释塔罗牌。不要先讲抽象牌义。",
+        "每一段都必须围绕用户问题里的核心对象、时间、人物、结果或行动；不能只说机会、节奏、能量、状态。",
+        "禁止把同一句话复制到不同牌位。过去、现在、未来必须分别承担：来源/现状关键变量/后续趋势。",
+        "如果用户问时间，必须比较每个时间窗口，指出哪个窗口更强、哪个窗口更像调整期，但不能承诺绝对预言。",
+        "如果用户问结果，必须给出倾向判断、影响变量、阻力和用户能改变的部分。",
+        "如果用户问怎么做，必须给出 2-4 个具体动作，动作要能在一周内开始。",
+        "每张牌的解释只服务于用户问题，不要背百科牌义，不要空泛安慰。",
+        "语言自然、具体、像真人在认真回答；短句优先，别装神秘。",
+        "输出必须是 JSON，不要 Markdown，不要代码块。"
+      ].join("\n");
+    }
+
+    function buildReadingMessages(question, cards, parsed) {
+      return [
+        { role: "system", content: aiSystemPrompt() },
+        {
+          role: "user",
+          content: JSON.stringify({
+            task: "生成三张牌塔罗解读",
+            strictRules: [
+              "summarySections 的第一段必须直接回答 question，不能出现“不是在给你一个抽象标签”这类套话。",
+              "single 三张牌的“放回你的问题里”必须分别说明：过去原因、现在卡点、未来趋势，不得重复。",
+              "所有 body 必须出现 question 或 parsedQuestion.target 相关语义，不能只解释牌。",
+              "如果无法确定，也要说“倾向是...”并给判断依据，不能回避用户问题。"
+            ],
+            outputShape: {
+              domain: "问题领域",
+              oneSentence: "一句话直接结论",
+              single: [
+                {
+                  role: "过去/现在/未来",
+                  title: "过去 · 牌名",
+                  sections: [
+                    { title: "这张牌在说什么", body: "围绕用户问题解释" },
+                    { title: "放回你的问题里", body: "直接贴合用户问题" },
+                    { title: "它的提醒", body: "具体提醒" }
+                  ]
+                }
+              ],
+              summarySections: [
+                { title: "一句话结论", body: "先回答问题" },
+                { title: "我先按你的问题来答", body: "具体判断，不绕" },
+                { title: "为什么这样看", body: "三张牌合起来的原因" },
+                { title: "时间/趋势拆解", body: "如果问题里有时间，就逐段分析；没有时间则分析趋势" },
+                { title: "你现在该怎么做", body: "可执行动作" },
+                { title: "需要避免什么", body: "风险与误区" },
+                { title: "可以追问的方向", body: "建议追问" }
+              ]
+            },
+            question,
+            parsedQuestion: parsed,
+            cards: cardPayload(cards),
+            interpretationFrame: {
+              answerFirst: directConclusion(parsed, cards),
+              userIntent: intentFrame(parsed),
+              domainContext: questionContext(parsed),
+              choiceOptions: parsed.options,
+              timeline: timelineAdvice(parsed, cards),
+              suggestedAction: specificAction(parsed),
+              avoid: avoidAdvice(parsed.domain)
+            }
+          })
+        }
+      ];
+    }
+
+    function buildFollowUpMessages(originalQuestion, cards, followUpQuestion, history, currentReading) {
+      const parsed = parseQuestion(originalQuestion);
+      const compactHistory = history.slice(-4).map(item => ({
+        question: item.question,
+        answer: item.answer.answerSections ? item.answer.answerSections : item.answer
+      }));
+      return [
+        { role: "system", content: aiSystemPrompt() },
+        {
+          role: "user",
+          content: JSON.stringify({
+            task: "回答塔罗解读页追问",
+            strictRules: [
+              "第一段必须直接回答 followUpQuestion，不要重新泛讲三张牌。",
+              "必须承接 originalQuestion 和 previousFollowUps，避免重复已经说过的话。",
+              "如果追问是行动建议，给出能执行的步骤；如果追问是趋势/结果，给出倾向和判断依据。"
+            ],
+            outputShape: {
+              intent: "追问意图",
+              answerSections: [
+                { title: "先回答你", body: "直接回答追问" },
+                { title: "结合牌来看", body: "用牌解释原因" },
+                { title: "具体动作", body: "下一步动作" },
+                { title: "判断标准", body: "用户如何观察是否在变好" }
+              ]
+            },
+            originalQuestion,
+            parsedQuestion: parsed,
+            cards: cardPayload(cards),
+            previousReading: currentReading && currentReading.summarySections ? currentReading.summarySections : [],
+            previousFollowUps: compactHistory,
+            followUpQuestion
+          })
+        }
+      ];
+    }
+
+    function withTimeout(promise, ms, controller) {
+      let timeoutId;
+      const timeout = new Promise((_, reject) => {
+        timeoutId = window.setTimeout(() => {
+          if (controller) controller.abort();
+          reject(new Error("DeepSeek 响应超时，请稍后再试"));
+        }, ms);
+      });
+      return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
+    }
+
+    function friendlyApiError(error) {
+      const message = error && error.message ? error.message : "DeepSeek 服务暂时不可用";
+      if (/Failed to fetch|NetworkError|Load failed/.test(message)) return "网络连接失败，请确认页面服务在线后重试。";
+      if (/超时|aborted|AbortError/i.test(message)) return "DeepSeek 响应超时，请稍后点击重新生成。";
+      if (/401|API Key|未配置|unauthorized/i.test(message)) return "AI 服务未配置完成，请稍后再试。";
+      if (/402|余额|quota|insufficient/i.test(message)) return "AI 服务额度可能不足，请稍后再试。";
+      if (/429|rate/i.test(message)) return "请求太频繁了，请等一小会儿再试。";
+      if (/5\d\d|503|502|500/.test(message)) return "AI 服务暂时不稳定，请稍后重新生成。";
+      return message;
+    }
+
+    async function callDeepSeek(messages, options = {}) {
+      const settings = aiSettings();
+      const attempts = options.retry === false ? 1 : 2;
+      let lastError = null;
+      for (let attempt = 0; attempt < attempts; attempt += 1) {
+        const controller = new AbortController();
+        try {
+          const response = await withTimeout(fetch("/api/deepseek", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
+            body: JSON.stringify({
+              model: settings.model,
+              messages,
+              temperature: options.temperature ?? 0.46,
+              max_tokens: options.maxTokens ?? 3000,
+              response_format: { type: "json_object" }
+            })
+          }), options.timeoutMs || 25000, controller);
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.error || `DeepSeek 请求失败：${response.status}`);
+          }
+          const content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+          if (!content) throw new Error("DeepSeek 没有返回内容");
+          return parseDeepSeekJson(content);
+        } catch (error) {
+          lastError = error;
+          if (attempt === attempts - 1) break;
+          await new Promise(resolve => window.setTimeout(resolve, 650));
+        }
+      }
+      throw new Error(friendlyApiError(lastError));
+    }
+
+    function parseDeepSeekJson(content) {
+      try {
+        return JSON.parse(content);
+      } catch {
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error("DeepSeek 返回内容不是可解析的 JSON");
+        return JSON.parse(jsonMatch[0]);
+      }
+    }
+
+    function normalizeAiReading(aiReading, localReading) {
+      const allText = [
+        aiReading.oneSentence || "",
+        ...(Array.isArray(aiReading.summarySections) ? aiReading.summarySections.map(section => `${section.title || ""}${section.body || ""}`) : []),
+        ...(Array.isArray(aiReading.single) ? aiReading.single.flatMap(item => (item.sections || []).map(section => `${section.title || ""}${section.body || ""}`)) : [])
+      ].join("");
+      if (allText.length < 120) {
+        throw new Error("DeepSeek 回答内容过短，请重新抽牌或稍后再试");
+      }
+      const single = Array.isArray(aiReading.single) && aiReading.single.length === 3
+        ? aiReading.single.map((item, index) => ({
+          role: item.role || POSITIONS[index],
+          title: item.title || `${POSITIONS[index]} · ${selected[index].cn}`,
+          sections: Array.isArray(item.sections) && item.sections.length
+            ? item.sections.slice(0, 4).map(section => ({
+              title: section.title || "解读",
+              body: section.body || ""
+            }))
+            : localReading.single[index].sections
+        }))
+        : localReading.single;
+      const summarySections = Array.isArray(aiReading.summarySections) && aiReading.summarySections.length
+        ? aiReading.summarySections.slice(0, 8).map(section => ({
+          title: section.title || "解读",
+          body: section.body || ""
+        }))
+        : localReading.summarySections;
+      return {
+        ...localReading,
+        domain: aiReading.domain || localReading.domain,
+        single,
+        summarySections,
+        source: "DeepSeek AI"
+      };
+    }
+
+    function apiFailureReading(localReading, error) {
+      const message = friendlyApiError(error);
+      const hint = location.protocol === "file:"
+        ? "请使用网页链接打开 Fate Ring。直接打开本地 HTML 文件时，AI 解读和摄像头权限都可能不可用。"
+        : "你可以点击下方的「重新生成解读」。如果仍失败，稍后再试通常就能恢复。";
+      return {
+        ...localReading,
+        single: localReading.single.map(item => ({
+          ...item,
+          sections: [
+            {
+              title: "AI 解读暂时没有生成",
+              body: "牌已经抽好，不需要重新占卜。等服务恢复后，可以直接重新生成这组三张牌的解读。"
+            },
+            {
+              title: "当前状态",
+              body: message
+            },
+            {
+              title: "你可以怎么做",
+              body: hint
+            }
+          ]
+        })),
+        summarySections: [
+          {
+            title: "AI 解读暂时不可用",
+            body: "这一次没有用本地模板冒充回答。你的三张牌会保留在页面上，可以直接重新生成。"
+          },
+          {
+            title: "当前状态",
+            body: message
+          },
+          {
+            title: "下一步",
+            body: hint
+          }
+        ],
+        source: "DeepSeek 暂不可用",
+        aiError: message
+      };
+    }
+
+    function normalizeAiFollowUp(aiAnswer, localAnswer) {
+      if (!Array.isArray(aiAnswer.answerSections) || !aiAnswer.answerSections.length) {
+        throw new Error("DeepSeek 追问回答格式不完整");
+      }
+      return {
+        intent: aiAnswer.intent || localAnswer.intent,
+        answerSections: aiAnswer.answerSections.slice(0, 5).map(section => ({
+          title: section.title || "解读",
+          body: section.body || ""
+        })),
+        source: "DeepSeek AI"
+      };
+    }
+
+    async function generateReading(question, cards) {
+      const localReading = generateLocalReading(question, cards);
+      try {
+        const aiReading = await callDeepSeek(buildReadingMessages(question, cards, localReading.parsed));
+        return normalizeAiReading(aiReading, localReading);
+      } catch (error) {
+        return apiFailureReading(localReading, error);
+      }
+    }
+
+    function classifyFollowUp(question) {
+      if (/怎么做|怎么办|建议|下一步|行动/.test(question)) return "行动建议";
+      if (/会不会|结果|能不能|是否|未来|发展/.test(question)) return "趋势判断";
+      if (/他怎么想|她怎么想|对方|想法|态度/.test(question)) return "他人视角";
+      if (/风险|注意|小心|问题|阻碍/.test(question)) return "风险提醒";
+      return "综合补充";
+    }
+
+    function answerFollowUp(originalQuestion, cards, followUpQuestion, history) {
+      const parsed = parseQuestion(originalQuestion);
+      const intent = classifyFollowUp(followUpQuestion);
+      const anchor = cards[history.length % cards.length];
+      const direction = orientationText(anchor);
+      const directAnswer = {
+        "行动建议": parsed.domain === "事业"
+          ? `你下一步要围绕「${parsed.target}」做现实推进：确定目标岗位、改简历、扩大信息入口、复盘反馈。不要只重复投递。`
+          : "你下一步不要急着做大决定，先做一个能验证局面的具体小动作。",
+        "趋势判断": parsed.intent === "时间判断" && parsed.hasTimeRange
+          ? `趋势更像是${parsed.timeRange.join(" / ")}里逐步变清楚，而不是一开始就直接落定。关键窗口要看哪一段出现明确反馈。`
+          : "这件事不是完全定死的，它会明显受你接下来怎么处理信息和行动节奏影响。",
+        "他人视角": "如果从对方或外部视角看，对方更可能先被现实压力和安全感影响，而不是单纯按情绪反应。",
+        "风险提醒": "最大的风险不是没有机会，而是你在信息不完整时过早下结论，或者把问题拖到更难处理。",
+        "综合补充": "这个追问的重点是帮你把模糊感变具体：你需要知道现在该看什么，而不是继续要一个绝对答案。"
+      }[intent];
+      return {
+        intent,
+        answerSections: [
+          {
+            title: "先回答你",
+            body: directAnswer
+          },
+          {
+            title: "结合牌来看",
+            body: `这次我用${anchor.cn}${direction}来回应你的追问。${cardDomainMeaning(anchor, parsed.domain)}所以它不是在单独讲牌，而是在回应「${parsed.target}」这件事的关键变量。`
+          },
+          {
+            title: "具体动作",
+            body: parsed.domain === "事业"
+              ? "这周先做三件事：列出 10 个更匹配的岗位；把简历里最能证明能力的 3 段经历重写；找 1-2 个能提供真实反馈的人看你的投递方向。"
+              : "这周先做三件小事：写下你真正想确认的问题；找一个可靠的人或信息源验证现实情况；给自己设一个不超过三天的下一步行动。"
+          },
+          {
+            title: "判断标准",
+            body: `如果做完这些之后，你对「${originalQuestion}」的判断更清楚、焦虑更少，那说明你在靠近正确方向；如果你只是更想逃避，就先不要仓促行动。`
+          }
+        ]
+      };
+    }
+
+    async function generateFollowUpAnswer(originalQuestion, cards, followUpQuestion, history) {
+      const localAnswer = answerFollowUp(originalQuestion, cards, followUpQuestion, history);
+      try {
+        const aiAnswer = await callDeepSeek(buildFollowUpMessages(originalQuestion, cards, followUpQuestion, history, currentReading));
+        return normalizeAiFollowUp(aiAnswer, localAnswer);
+      } catch (error) {
+        const message = friendlyApiError(error);
+        return {
+          intent: "DeepSeek 暂不可用",
+          answerSections: [
+            {
+              title: "AI 暂时没有回答追问",
+              body: "你的追问已经保留，但这次 AI 服务没有成功返回。"
+            },
+            {
+              title: "当前状态",
+              body: message
+            },
+            {
+              title: "你可以怎么做",
+              body: location.protocol === "file:"
+                ? "请用网页链接打开页面，不要直接打开本地 HTML 文件。"
+                : "稍后再问一次，或者先点击重新生成主解读确认 AI 服务是否恢复。"
+            }
+          ],
+          source: "DeepSeek 暂不可用",
+          aiError: message
+        };
+      }
+    }
+
+    async function checkApiAvailability() {
+      try {
+        const controller = new AbortController();
+        const response = await withTimeout(fetch("/api/deepseek", {
+          method: "GET",
+          signal: controller.signal
+        }), 6000, controller);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "AI 服务未连接");
+        if (data.configured === false) throw new Error("AI 服务未配置完成");
+        return true;
+      } catch (error) {
+        if (!currentQuestion) {
+          questionHint.textContent = friendlyApiError(error);
+        }
+        return false;
+      }
+    }
+
+    function checkRuntimeEnvironment() {
+      const isLocal = ["localhost", "127.0.0.1", ""].includes(location.hostname);
+      const isSecure = location.protocol === "https:" || isLocal;
+      if (location.protocol === "file:") {
+        questionHint.textContent = "请使用网页链接打开 Fate Ring，直接打开 HTML 文件时 AI 和摄像头可能不可用。";
+        return;
+      }
+      if (!isSecure) {
+        questionHint.textContent = "当前不是 HTTPS 页面，浏览器可能会阻止摄像头手势识别。";
+      }
+      checkApiAvailability();
+    }
+
+    function renderAnswerSections(sections) {
+      return sections.map(section => `
+        <div class="answer-section">
+          <strong>${escapeHtml(section.title)}</strong>
+          <p>${escapeHtml(section.body)}</p>
+        </div>
+      `).join("");
+    }
+
+    function renderFollowUpHistory() {
+      if (!readingHistory.length) {
+        followUpList.innerHTML = `<div class="followup-empty">你可以继续追问，例如“我下一步该怎么做？”或“这件事最大的风险是什么？”</div>`;
+        return;
+      }
+      followUpList.innerHTML = readingHistory.map(item => `
+        <article class="followup-message user">
+          <div class="followup-speaker">你的追问</div>
+          <p>${escapeHtml(item.question)}</p>
+        </article>
+        <article class="followup-message">
+          <div class="followup-speaker">命运之轮</div>
+          ${renderAnswerSections(item.answer.answerSections)}
+        </article>
+      `).join("");
+      followUpList.scrollTop = followUpList.scrollHeight;
+    }
+
+    function renderReadingQuestion() {
+      readingQuestion.classList.add("active");
+      if (!currentReading) {
+        readingQuestion.innerHTML = `<span class="question-label">原始问题 · 生成中</span>${escapeHtml(currentQuestion)}<span class="ai-badge">DeepSeek</span>`;
+        return;
+      }
+      readingQuestion.innerHTML = `<span class="question-label">原始问题 · ${escapeHtml(currentReading.domain)}</span>${escapeHtml(currentQuestion)}<span class="ai-badge${currentReading.aiError ? " warning" : ""}">${escapeHtml(currentReading.source || "DeepSeek AI")}</span>${currentReading.aiError ? `<span class="ai-badge warning">可重新生成</span>` : ""}`;
+    }
+
+    function renderSelectedReadingCards() {
+      readingCards.innerHTML = "";
+      selected.forEach((card, index) => {
+        const role = POSITIONS[index];
+        const cardEl = document.createElement("article");
+        cardEl.className = "reading-card";
+        cardEl.innerHTML = `
+          <img src="${imagePath(card)}" alt="${card.cn}" style="transform:${card.reversed ? "rotate(180deg)" : "none"}">
+          <div>
+            <div class="reading-role">${role}</div>
+            <div class="reading-name">${card.cn}</div>
+            <div class="reading-en">${card.en}</div>
+            <span class="badge">${card.reversed ? "逆位" : "正位"}</span>
+          </div>
+        `;
+        readingCards.appendChild(cardEl);
+      });
+    }
+
+    function renderReadingLoading() {
+      currentReading = null;
+      renderReadingQuestion();
+      readingBlocks.innerHTML = "";
+      summaryBlock.innerHTML = `
+        <h2>整体解读</h2>
+        <div class="answer-section">
+          <strong>正在生成</strong>
+          <p>正在连接 DeepSeek，把你的问题、三张牌、正逆位和牌位一起交给 AI 解读...</p>
+        </div>
+      `;
+      regenerateBtn.classList.remove("visible");
+      regenerateBtn.disabled = true;
+    }
+
+    function renderReadingResult() {
+      renderReadingQuestion();
+      regenerateBtn.classList.toggle("visible", Boolean(currentReading && currentReading.aiError));
+      regenerateBtn.disabled = false;
+      readingBlocks.innerHTML = "";
+      selected.forEach((card, index) => {
+        const reading = currentReading.single[index];
+        const block = document.createElement("article");
+        block.className = "reading-block";
+        block.innerHTML = `
+          <h2>${escapeHtml(reading.title)}</h2>
+          ${renderAnswerSections(reading.sections)}
+        `;
+        readingBlocks.appendChild(block);
+      });
+      summaryBlock.innerHTML = `
+        <h2>整体解读</h2>
+        ${renderAnswerSections(currentReading.summarySections)}
+      `;
+      renderFollowUpHistory();
+    }
+
+    async function loadCurrentReading() {
+      renderReadingLoading();
+      currentReading = await generateReading(currentQuestion, selected);
+      renderReadingResult();
+    }
+
+    async function showReading() {
+      if (gestureActive) stopGestureMode();
+      selectScreen.classList.remove("active");
+      readingScreen.classList.add("active");
+      renderSelectedReadingCards();
+      await loadCurrentReading();
+    }
+
+    function resetReading() {
+      selected = [];
+      currentQuestion = "";
+      questionDomain = "通用";
+      readingHistory = [];
+      currentReading = null;
+      rotation = 0;
+      velocity = 0;
+      cancelGestureHold();
+      selectScreen.classList.add("active");
+      readingScreen.classList.remove("active");
+      questionInput.value = "";
+      followUpInput.value = "";
+      questionHint.textContent = "请先写下你想询问的主题，命运之轮才会开始回应。";
+      readingQuestion.classList.remove("active");
+      readingQuestion.innerHTML = "";
+      followUpList.innerHTML = "";
+      regenerateBtn.classList.remove("visible");
+      regenerateBtn.disabled = false;
+      updateQuestionGate();
+      renderSlots();
+      renderRing();
+      startGestureMode();
+    }
+
+    async function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    }
+
+    function drawParticlePlaceholder() {
+      const ctx = particleCanvas.getContext("2d");
+      const dpr = window.devicePixelRatio || 1;
+      particleCanvas.width = window.innerWidth * dpr;
+      particleCanvas.height = window.innerHeight * dpr;
+      particleCanvas.style.width = `${window.innerWidth}px`;
+      particleCanvas.style.height = `${window.innerHeight}px`;
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      for (let i = 0; i < 86; i += 1) {
+        const x = Math.random() * window.innerWidth;
+        const y = Math.random() * window.innerHeight;
+        const r = Math.random() * 1.7 + 0.4;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = i % 3 === 0 ? "rgba(212,175,55,.52)" : "rgba(202,175,255,.22)";
+        ctx.fill();
+      }
+    }
+
+    function setGestureStatus(text, tracking = false) {
+      gestureStatus.textContent = text;
+      gesturePanel.classList.toggle("tracking", tracking);
+    }
+
+    function resizeGestureOverlay() {
+      const rect = gestureOverlay.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const width = Math.max(1, Math.round(rect.width * dpr));
+      const height = Math.max(1, Math.round(rect.height * dpr));
+      if (gestureOverlay.width !== width || gestureOverlay.height !== height) {
+        gestureOverlay.width = width;
+        gestureOverlay.height = height;
+      }
+      gestureOverlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return { width: rect.width, height: rect.height };
+    }
+
+    function clearGestureOverlay() {
+      const { width, height } = resizeGestureOverlay();
+      gestureOverlayCtx.clearRect(0, 0, width, height);
+    }
+
+    function drawGestureLandmarks(hand, highlighted = false) {
+      const { width, height } = resizeGestureOverlay();
+      gestureOverlayCtx.clearRect(0, 0, width, height);
+      const lineColor = highlighted ? "rgba(255, 255, 255, 0.94)" : "rgba(255, 255, 255, 0.68)";
+      const pointColor = highlighted ? "rgba(255, 255, 255, 0.96)" : "rgba(255, 255, 255, 0.82)";
+
+      gestureOverlayCtx.lineWidth = highlighted ? 1.9 : 1.25;
+      gestureOverlayCtx.lineCap = "round";
+      gestureOverlayCtx.lineJoin = "round";
+      gestureOverlayCtx.strokeStyle = lineColor;
+      gestureOverlayCtx.shadowColor = "rgba(255, 255, 255, 0.24)";
+      gestureOverlayCtx.shadowBlur = highlighted ? 8 : 4;
+
+      HAND_CONNECTIONS.forEach(([from, to]) => {
+        const a = hand[from];
+        const b = hand[to];
+        gestureOverlayCtx.beginPath();
+        gestureOverlayCtx.moveTo(a.x * width, a.y * height);
+        gestureOverlayCtx.lineTo(b.x * width, b.y * height);
+        gestureOverlayCtx.stroke();
+      });
+
+      hand.forEach((point, index) => {
+        const isTip = [4, 8, 12, 16, 20].includes(index);
+        const radius = highlighted || isTip ? 2.7 : 2.15;
+        gestureOverlayCtx.beginPath();
+        gestureOverlayCtx.fillStyle = pointColor;
+        gestureOverlayCtx.arc(point.x * width, point.y * height, radius, 0, Math.PI * 2);
+        gestureOverlayCtx.fill();
+      });
+
+      gestureOverlayCtx.shadowBlur = 0;
+    }
+
+    function landmarkDistance(a, b) {
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+
+    function isFingerCurled(tip, pip) {
+      return tip.y > pip.y + 0.012;
+    }
+
+    function getFocusedCardEl() {
+      return ring.children[focusedIndex] || null;
+    }
+
+    function cancelGestureHold() {
+      if (gestureSelectingEl) gestureSelectingEl.classList.remove("holding");
+      gestureSelectingEl = null;
+      gestureSelectingIndex = null;
+      gestureHoldStart = 0;
+    }
+
+    function handleGestureSelect(now) {
+      if (!currentQuestion) {
+        setGestureStatus("请先输入问题", false);
+        cancelGestureHold();
+        return;
+      }
+      if (now < gestureCooldownUntil || selected.length >= 3) return;
+      const el = getFocusedCardEl();
+      if (!el || el.classList.contains("selected")) return;
+      if (gestureSelectingEl !== el) {
+        cancelGestureHold();
+        gestureSelectingEl = el;
+        gestureSelectingIndex = focusedIndex;
+        gestureHoldStart = now;
+        velocity = 0;
+        el.classList.add("holding");
+      }
+      if (now - gestureHoldStart >= CONFIG.holdMs) {
+        chooseCard(gestureSelectingIndex, el);
+        gestureCooldownUntil = now + 900;
+      }
+    }
+
+    function onGestureResults(results) {
+      if (!gestureActive) return;
+      const hand = results.multiHandLandmarks && results.multiHandLandmarks[0];
+      const now = performance.now();
+      if (!hand) {
+        gestureLastX = null;
+        cancelGestureHold();
+        clearGestureOverlay();
+        setGestureStatus("未检测到手", false);
+        return;
+      }
+
+      const palmX = (hand[0].x + hand[5].x + hand[9].x + hand[13].x + hand[17].x) / 5;
+      const pinch = landmarkDistance(hand[4], hand[8]) < 0.065;
+      const curledCount = [
+        isFingerCurled(hand[8], hand[6]),
+        isFingerCurled(hand[12], hand[10]),
+        isFingerCurled(hand[16], hand[14]),
+        isFingerCurled(hand[20], hand[18])
+      ].filter(Boolean).length;
+      const closedPose = pinch || curledCount >= 3;
+      drawGestureLandmarks(hand, closedPose);
+
+      if (gestureLastX !== null) {
+        const dx = palmX - gestureLastX;
+        const dt = Math.max(now - gestureLastAt, 16);
+        if (Math.abs(dx) > 0.004 && !closedPose) {
+          const delta = -dx * CONFIG.gestureSensitivity;
+          rotation += delta;
+          velocity = (delta * 16) / dt;
+          updateRing();
+          cancelGestureHold();
+          setGestureStatus("滑动中", true);
+        } else if (closedPose) {
+          velocity = 0;
+          setGestureStatus(currentQuestion ? "保持手势选牌" : "请先输入问题", Boolean(currentQuestion));
+          handleGestureSelect(now);
+        } else {
+          cancelGestureHold();
+          setGestureStatus("手势就绪", true);
+        }
+      } else {
+        setGestureStatus("手势就绪", true);
+      }
+
+      gestureLastX = palmX;
+      gestureLastAt = now;
+    }
+
+    async function startGestureMode() {
+      gesturePanel.classList.add("active");
+      if (!window.Hands || !window.Camera) {
+        setGestureStatus("MediaPipe加载失败", false);
+        gestureActive = false;
+        return;
+      }
+
+      gestureActive = true;
+      setGestureStatus("正在开启摄像头", false);
+
+      if (!hands) {
+        hands = new Hands({
+          locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+        hands.setOptions({
+          maxNumHands: 1,
+          modelComplexity: 1,
+          minDetectionConfidence: 0.68,
+          minTrackingConfidence: 0.62
+        });
+        hands.onResults(onGestureResults);
+      }
+
+      if (!camera) {
+        camera = new Camera(gestureVideo, {
+          width: 360,
+          height: 270,
+          onFrame: async () => {
+            if (gestureActive) await hands.send({ image: gestureVideo });
+          }
+        });
+      }
+
+      try {
+        await camera.start();
+        setGestureStatus("手势就绪", false);
+      } catch (error) {
+        gestureActive = false;
+        setGestureStatus("摄像头不可用", false);
+      }
+    }
+
+    function stopGestureMode() {
+      gestureActive = false;
+      gestureLastX = null;
+      cancelGestureHold();
+      clearGestureOverlay();
+      setGestureStatus("手势未开启", false);
+      if (gestureVideo.srcObject) {
+        gestureVideo.srcObject.getTracks().forEach(track => track.stop());
+        gestureVideo.srcObject = null;
+      }
+      camera = null;
+    }
+    questionInput.addEventListener("input", () => {
+      startReadingBtn.disabled = questionInput.value.trim().length === 0;
+      if (!currentQuestion) {
+        questionHint.textContent = questionInput.value.trim()
+          ? "写好后点击开始占卜，牌阵会根据这个问题解读。"
+          : "请先写下你想询问的主题，命运之轮才会开始回应。";
+      }
+    });
+
+    questionForm.addEventListener("submit", event => {
+      event.preventDefault();
+      const question = questionInput.value.trim();
+      if (!question) {
+        questionHint.textContent = "问题不能为空。";
+        questionInput.focus();
+        return;
+      }
+      beginQuestionReading(question);
+    });
+
+    followUpForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      const followUpQuestion = followUpInput.value.trim();
+      if (!followUpQuestion || !currentQuestion || !selected.length || aiBusy) return;
+      rememberRecentQuestion(followUpQuestion);
+      aiBusy = true;
+      const submitBtn = followUpForm.querySelector("button");
+      submitBtn.disabled = true;
+      const pendingItem = {
+        question: followUpQuestion,
+        answer: {
+          answerSections: [
+            { title: "正在生成", body: "正在连接 DeepSeek 回答你的追问..." }
+          ]
+        }
+      };
+      readingHistory.push(pendingItem);
+      followUpInput.value = "";
+      renderFollowUpHistory();
+      const answer = await generateFollowUpAnswer(currentQuestion, selected, followUpQuestion, readingHistory.slice(0, -1));
+      pendingItem.answer = answer;
+      aiBusy = false;
+      submitBtn.disabled = false;
+      renderFollowUpHistory();
+    });
+
+    fullscreenBtn.addEventListener("click", toggleFullscreen);
+    readingFullscreenBtn.addEventListener("click", toggleFullscreen);
+    regenerateBtn.addEventListener("click", () => {
+      if (!currentQuestion || selected.length !== 3 || aiBusy) return;
+      loadCurrentReading();
+    });
+    resetBtn.addEventListener("click", resetReading);
+    window.addEventListener("resize", () => {
+      drawParticlePlaceholder();
+      clearGestureOverlay();
+    });
+
+    renderSlots();
+    renderRing();
+    updateQuestionGate();
+    renderRecentQuestionOptions();
+    renderFollowUpHistory();
+    drawParticlePlaceholder();
+    clearGestureOverlay();
+    checkRuntimeEnvironment();
+    animate();
+    startGestureMode();
+  </script>
+</body>
+</html>
