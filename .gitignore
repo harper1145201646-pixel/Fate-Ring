@@ -7,3 +7,4 @@ outputs/
 *.zip
 .env
 .env.local
+.vercel

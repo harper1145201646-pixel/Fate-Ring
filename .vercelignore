@@ -1,0 +1,33 @@
+.DS_Store
+.env
+.env.local
+.runtime/
+.git/
+node_modules/
+release/
+outputs/
+*.dmg
+*.zip
+
+2026-ai产品经理求职指南.md
+AIGC-Hub-Portfolio/
+AIGC工具平台-AI模型发布时间与接入选型.md
+PRD-本地文章草稿即时预览.md
+active-ripple-portfolio/
+article-web-generator/
+artist-gesture-interaction-page/
+axton-obsidian-visual-skills/
+boss直聘抓取-aigc/
+cinematic-ai-portfolio/
+claude-install.sh
+gesture-archive-sketchbook/
+harper-ai-pm-portfolio-share 2/
+harper-ai-pm-portfolio-share 3/
+harper-ai-pm-portfolio-share/
+harper-ai-pm-portfolio/
+moxie/
+pm-skills/
+ui sheji 2/
+ui sheji 3/
+vintage-desk-gesture-web/
+齿轮神谕_三分钟剧本.txt
